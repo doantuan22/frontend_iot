@@ -3,16 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Giám Sát IOT | Hệ Thống Giám Sát Thông Minh</title>
-    <meta name="description" content="Hệ thống giám sát IoT hiện đại với dữ liệu thời gian thực và camera an ninh.">
-    
+    <title>Giám sát IoT | Hệ thống giám sát thông minh</title>
+    <meta name="description" content="Hệ thống giám sát IoT thời gian thực với cảnh báo cảm biến và hình ảnh giám sát.">
+
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    
-    <!-- Libraries -->
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -21,57 +19,59 @@
     <div id="alert-container"></div>
 
     <div class="app-layout">
-        <!-- Sidebar -->
         <aside class="sidebar">
             <div class="sidebar-header">
-                <div class="hamburger">
+                <button class="hamburger" type="button" aria-label="Mở menu">
                     <i data-lucide="menu"></i>
-                </div>
+                </button>
                 <div class="logo-text">GIÁM SÁT IOT</div>
             </div>
-            
+
             <nav class="sidebar-nav">
                 <a href="#" class="nav-item active" onclick="switchPage('home', event)">
                     <i data-lucide="home"></i>
-                    <span>TRANG CHỦ</span>
+                    <span>Trang chủ</span>
                 </a>
                 <a href="#" class="nav-item" onclick="switchPage('stats', event)">
                     <i data-lucide="bar-chart-2"></i>
-                    <span>THỐNG KÊ</span>
+                    <span>Thống kê</span>
                 </a>
                 <a href="#" class="nav-item" onclick="switchPage('history', event)">
                     <i data-lucide="history"></i>
-                    <span>LỊCH SỬ</span>
+                    <span>Lịch sử</span>
                 </a>
             </nav>
         </aside>
 
-        <!-- Main Content -->
         <main class="main-content">
-            <!-- Header -->
             <header class="top-header">
-                <h1 id="page-title">TRANG CHỦ</h1>
+                <h1 id="page-title">Trang chủ</h1>
                 <div class="status-badges">
                     <div class="status-badge" id="mqtt-badge">
                         <span class="dot" id="mqtt-dot"></span>
-                        MQTT: <span id="mqtt-status">NGOẠI TUYẾN</span>
+                        MQTT: <span id="mqtt-status">Đang kiểm tra</span>
                     </div>
                     <div class="status-badge" id="cloud-badge">
                         <span class="dot" id="cloud-dot"></span>
-                        SUPEDATA: <span id="cloud-status">NGOẠI TUYẾN</span>
+                        Supabase: <span id="cloud-status">Đang kiểm tra</span>
                     </div>
                 </div>
             </header>
 
-            <!-- Views Container -->
             <div class="view-container">
-                
-                <!-- Home View -->
                 <section id="home-view" class="view active">
+                    <div id="active-alert-banner" class="active-alert-banner hidden" role="alert">
+                        <div class="alert-pulse-icon"><i data-lucide="triangle-alert"></i></div>
+                        <div>
+                            <strong id="active-alert-title">Đang an toàn</strong>
+                            <span id="active-alert-message">Chưa ghi nhận cảnh báo từ cảm biến.</span>
+                        </div>
+                        <span id="active-alert-time">--</span>
+                    </div>
+
                     <div class="home-grid">
-                        <!-- Left Panel: Sensors & Controls -->
                         <div class="left-panel">
-                            <h2 class="section-title">THÔNG SỐ CẢM BIẾN</h2>
+                            <h2 class="section-title">Thông số cảm biến</h2>
                             <div class="sensor-cards-grid">
                                 <div class="sensor-card" id="temp-card">
                                     <div class="card-header">
@@ -84,7 +84,7 @@
                                         <span class="card-value" id="temp-val">--</span>
                                         <span class="card-unit">°C</span>
                                     </div>
-                                    <div class="card-footer" id="temp-time">Waiting for data...</div>
+                                    <div class="card-footer" id="temp-time">Đang chờ dữ liệu...</div>
                                 </div>
 
                                 <div class="sensor-card" id="gas-card">
@@ -92,13 +92,13 @@
                                         <div class="icon-wrapper gas">
                                             <i data-lucide="wind"></i>
                                         </div>
-                                        <span class="card-label">Nồng độ Gas</span>
+                                        <span class="card-label">Nồng độ gas</span>
                                     </div>
                                     <div class="card-main">
                                         <span class="card-value" id="gas-val">--</span>
                                         <span class="card-unit">ppm</span>
                                     </div>
-                                    <div class="card-footer" id="gas-time">Nồng độ độ for data...</div>
+                                    <div class="card-footer" id="gas-time">Đang chờ dữ liệu...</div>
                                 </div>
 
                                 <div class="sensor-card" id="fire-card">
@@ -106,12 +106,12 @@
                                         <div class="icon-wrapper fire">
                                             <i data-lucide="flame"></i>
                                         </div>
-                                        <span class="card-label">Trạng thái Lửa</span>
+                                        <span class="card-label">Trạng thái lửa</span>
                                     </div>
                                     <div class="card-main">
-                                        <span class="card-value status" id="fire-val">AN TOÀN</span>
+                                        <span class="card-value status" id="fire-val">An toàn</span>
                                     </div>
-                                    <div class="card-footer" id="fire-time">Monitoring...</div>
+                                    <div class="card-footer" id="fire-time">Đang giám sát...</div>
                                 </div>
 
                                 <div class="sensor-card" id="humi-card">
@@ -125,73 +125,70 @@
                                         <span class="card-value" id="humi-val">--</span>
                                         <span class="card-unit">%</span>
                                     </div>
-                                    <div class="card-footer" id="humi-time">Ready</div>
+                                    <div class="card-footer" id="humi-time">Sẵn sàng</div>
                                 </div>
                             </div>
 
                             <div class="controls-card">
-                                <h3 class="card-title">CÀI ĐẶT NGƯỠNG & ĐIỀU KHIỂN</h3>
-                                
+                                <h3 class="card-title">Cài đặt ngưỡng cảnh báo</h3>
+
                                 <div class="threshold-section">
-                                    <h4 class="sub-title">CÀI ĐẶT NGƯỠNG</h4>
                                     <div class="input-group">
-                                        <label>Ngưỡng Gas (ppm)</label>
+                                        <label for="gas-limit-input">Ngưỡng gas (ppm)</label>
                                         <div class="input-with-btn">
                                             <input type="number" id="gas-limit-input" value="1500">
-                                            <button onclick="setThreshold('gas')">LƯU CÀI ĐẶT</button>
+                                            <button onclick="setThreshold('gas')">Lưu</button>
                                         </div>
                                     </div>
                                     <div class="input-group">
-                                        <label>Ngưỡng Nhiệt Độ (°C)</label>
+                                        <label for="temp-limit-input">Ngưỡng nhiệt độ (°C)</label>
                                         <div class="input-with-btn">
                                             <input type="number" id="temp-limit-input" value="50">
-                                            <button onclick="setThreshold('temp')">LƯU CÀI ĐẶT</button>
+                                            <button onclick="setThreshold('temp')">Lưu</button>
                                         </div>
                                     </div>
                                     <div class="input-group">
-                                        <label>Ngưỡng Độ Ẩm (%)</label>
+                                        <label for="humi-limit-input">Ngưỡng độ ẩm (%)</label>
                                         <div class="input-with-btn">
                                             <input type="number" id="humi-limit-input" value="60">
-                                            <button onclick="setThreshold('humi')">LƯU CÀI ĐẶT</button>
+                                            <button onclick="setThreshold('humi')">Lưu</button>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Right Panel: Surveillance -->
                         <div class="right-panel">
-                            <h2 class="section-title">LUỒNG GIÁM SÁT MỚI NHẤT (SUPEDATA)</h2>
+                            <h2 class="section-title">Luồng giám sát mới nhất</h2>
                             <div class="stream-card">
                                 <div class="stream-container" id="main-image-placeholder">
-                                    <img src="" alt="Live Stream" id="latest-img">
+                                    <img src="" alt="Luồng giám sát trực tiếp" id="latest-img">
                                     <div class="event-overlay">
-                                        <div class="overlay-header">SỰ KIỆN GẦN NHẤT</div>
+                                        <div class="overlay-header">Sự kiện gần nhất</div>
                                         <div class="overlay-content">
-                                            <img src="" id="overlay-img" alt="Last Event">
+                                            <img src="" id="overlay-img" alt="Ảnh sự kiện gần nhất">
                                         </div>
                                     </div>
                                 </div>
                                 <div class="stream-footer">
                                     <i data-lucide="camera"></i>
-                                    <span>Đang phát trực tiếp từ Supedata</span>
+                                    <span>Đang cập nhật hình ảnh từ Supabase</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                <!-- Stats View -->
                 <section id="stats-view" class="view">
                     <div class="stats-filters">
-                        <select id="time-range">
+                        <select id="time-range" aria-label="Khoảng thời gian">
                             <option>7 ngày qua</option>
                             <option>Hôm nay</option>
                             <option>30 ngày qua</option>
                         </select>
-                        <select id="data-type">
-                            <option>Hôm nay</option>
-                            <option>Hôm qua</option>
+                        <select id="data-type" aria-label="Bộ lọc dữ liệu">
+                            <option>Dữ liệu cảm biến</option>
+                            <option>Cảnh báo</option>
                         </select>
                     </div>
 
@@ -199,15 +196,15 @@
                         <div class="stat-card">
                             <div class="stat-icon temp"><i data-lucide="thermometer"></i></div>
                             <div class="stat-info">
-                                <span class="stat-label">Nhiệt độ TB</span>
-                                <div class="stat-value" id="stats-temp-val">--°C</div>
+                                <span class="stat-label">Nhiệt độ trung bình</span>
+                                <div class="stat-value" id="stats-temp-val">-- °C</div>
                                 <span class="stat-desc" id="stats-temp-desc">Đợi dữ liệu...</span>
                             </div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-icon gas"><i data-lucide="wind"></i></div>
                             <div class="stat-info">
-                                <span class="stat-label">Nồng độ Gas TB</span>
+                                <span class="stat-label">Gas trung bình</span>
                                 <div class="stat-value" id="stats-gas-val">-- ppm</div>
                                 <span class="stat-desc" id="stats-gas-desc">Đợi dữ liệu...</span>
                             </div>
@@ -215,15 +212,15 @@
                         <div class="stat-card">
                             <div class="stat-icon fire"><i data-lucide="flame"></i></div>
                             <div class="stat-info">
-                                <span class="stat-label">Số lần báo động</span>
+                                <span class="stat-label">Số lần cảnh báo</span>
                                 <div class="stat-value" id="stats-fire-count">0</div>
-                                <span class="stat-desc" id="stats-fire-desc">Đợi dữ liệu...</span>
+                                <span class="stat-desc" id="stats-fire-desc">Tính trong phiên hiện tại</span>
                             </div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-icon humi"><i data-lucide="droplets"></i></div>
                             <div class="stat-info">
-                                <span class="stat-label">Độ ẩm TB</span>
+                                <span class="stat-label">Độ ẩm trung bình</span>
                                 <div class="stat-value" id="stats-humi-val">-- %</div>
                                 <span class="stat-desc" id="stats-humi-desc">Đợi dữ liệu...</span>
                             </div>
@@ -232,14 +229,14 @@
 
                     <div class="stats-charts-stack">
                         <div class="chart-card">
-                            <h3 class="chart-title">Theo dõi Nhiệt độ & Độ ẩm</h3>
+                            <h3 class="chart-title">Theo dõi nhiệt độ và độ ẩm</h3>
                             <div class="chart-wrapper">
                                 <canvas id="mainChart"></canvas>
                             </div>
                         </div>
 
                         <div class="chart-card">
-                            <h3 class="chart-title">Theo dõi Nồng độ Gas</h3>
+                            <h3 class="chart-title">Theo dõi nồng độ gas</h3>
                             <div class="chart-wrapper">
                                 <canvas id="gasChart"></canvas>
                             </div>
@@ -247,17 +244,18 @@
                     </div>
                 </section>
 
-                <!-- History View -->
                 <section id="history-view" class="view">
                     <div class="history-controls">
                         <div class="search-bar">
                             <i data-lucide="search"></i>
-                            <input type="text" placeholder="Search...">
+                            <input type="text" placeholder="Tìm kiếm sự kiện...">
                         </div>
-                        <select>
-                            <option>Loại Sự kiện</option>
+                        <select aria-label="Loại sự kiện">
+                            <option>Loại sự kiện</option>
+                            <option>Camera</option>
+                            <option>Cảnh báo cảm biến</option>
                         </select>
-                        <button class="filter-btn"><i data-lucide="sliders-horizontal"></i></button>
+                        <button class="filter-btn" type="button" aria-label="Lọc dữ liệu"><i data-lucide="sliders-horizontal"></i></button>
                     </div>
 
                     <div class="table-container">
@@ -265,41 +263,35 @@
                             <thead>
                                 <tr>
                                     <th>Thời gian</th>
-                                    <th>Loại Sự kiện</th>
+                                    <th>Loại sự kiện</th>
                                     <th>Chi tiết</th>
                                     <th>Hình ảnh</th>
                                 </tr>
                             </thead>
                             <tbody id="history-table-body">
-                                <!-- Data will be injected here -->
+                                <tr>
+                                    <td colspan="4">Đang tải lịch sử...</td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
 
                     <div class="pagination">
-                        <span id="total-records">Tổng coan: 102</span>
+                        <span id="total-records">Tổng cộng: 0</span>
                         <div class="page-numbers">
-                            <button class="prev-page"><i data-lucide="chevron-left"></i></button>
-                            <button class="page-num active">1</button>
-                            <button class="page-num">2</button>
-                            <button class="page-num">3</button>
-                            <button class="next-page"><i data-lucide="chevron-right"></i></button>
+                            <button class="prev-page" type="button" aria-label="Trang trước"><i data-lucide="chevron-left"></i></button>
+                            <button class="page-num active" type="button">1</button>
+                            <button class="next-page" type="button" aria-label="Trang sau"><i data-lucide="chevron-right"></i></button>
                         </div>
                     </div>
                 </section>
-
             </div>
         </main>
     </div>
 
-    <!-- Star decoration as in mockup bottom right -->
-    <div class="star-decor">✦</div>
-
-    <script src="main.js"></script>
+    <script src="main.js?v=20260517-image-realtime-fix"></script>
     <script>
-        // Initialize Lucide icons
         lucide.createIcons();
     </script>
 </body>
 </html>
-

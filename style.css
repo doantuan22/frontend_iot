@@ -64,6 +64,11 @@ body {
 .hamburger {
     color: var(--text-main);
     cursor: pointer;
+    border: 0;
+    background: transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .logo-text {
@@ -210,6 +215,70 @@ body {
     gap: 32px;
 }
 
+.active-alert-banner {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 16px;
+    background: #991b1b;
+    color: #ffffff;
+    padding: 16px 20px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+    box-shadow: 0 18px 45px rgba(153, 27, 27, 0.22);
+    animation: alertBannerIn 0.25s ease-out, alertBannerPulse 1.4s ease-in-out infinite;
+}
+
+.active-alert-banner.hidden {
+    display: none;
+}
+
+.active-alert-banner strong,
+.active-alert-banner span {
+    display: block;
+}
+
+.active-alert-banner strong {
+    font-size: 1rem;
+    margin-bottom: 4px;
+}
+
+.active-alert-banner span {
+    font-size: 0.88rem;
+    line-height: 1.45;
+}
+
+#active-alert-time {
+    font-size: 0.8rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.alert-pulse-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.16);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.alert-pulse-icon i {
+    width: 24px;
+    height: 24px;
+}
+
+@keyframes alertBannerIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes alertBannerPulse {
+    0%, 100% { box-shadow: 0 18px 45px rgba(153, 27, 27, 0.22); }
+    50% { box-shadow: 0 18px 56px rgba(239, 68, 68, 0.42); }
+}
+
 .left-panel, .right-panel {
     display: flex;
     flex-direction: column;
@@ -230,6 +299,8 @@ body {
     box-shadow: var(--shadow-sm);
     border: 1px solid var(--border);
     transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
 }
 
 .sensor-card:hover {
@@ -262,6 +333,26 @@ body {
 .icon-wrapper.gas { background: #fef3c7; color: #d97706; }
 .icon-wrapper.fire { background: #dcfce7; color: #16a34a; }
 .icon-wrapper.humi { background: #e0f2fe; color: #0284c7; }
+
+.sensor-card.danger-glow .icon-wrapper {
+    background: #fee2e2;
+    color: var(--danger);
+}
+
+.sensor-card.danger-glow::after {
+    content: "CẢNH BÁO";
+    position: absolute;
+    top: 12px;
+    right: -34px;
+    width: 120px;
+    transform: rotate(35deg);
+    background: var(--danger);
+    color: #ffffff;
+    font-size: 0.62rem;
+    font-weight: 800;
+    text-align: center;
+    padding: 4px 0;
+}
 
 .card-label {
     font-size: 0.9rem;
@@ -790,8 +881,24 @@ input:checked + .slider:before { transform: translateX(24px); }
     align-items: center;
     gap: 16px;
     min-width: 320px;
-    border-left: 6px solid var(--danger);
+    border-left: 6px solid var(--success);
     animation: slideIn 0.3s ease-out;
+}
+
+.alert-toast.warning {
+    border-left-color: var(--warning);
+}
+
+.alert-toast.error {
+    border-left-color: var(--danger);
+}
+
+.alert-toast.danger {
+    border-left-color: var(--danger);
+}
+
+.alert-toast.success {
+    border-left-color: var(--success);
 }
 
 @keyframes slideIn {
@@ -799,9 +906,43 @@ input:checked + .slider:before { transform: translateX(24px); }
     to { transform: translateX(0); opacity: 1; }
 }
 
-.alert-icon { font-size: 1.5rem; }
-.alert-content b { display: block; color: var(--danger); margin-bottom: 2px; }
+.alert-icon {
+    width: 28px;
+    height: 28px;
+    color: var(--success);
+}
+
+.alert-toast.warning .alert-icon,
+.alert-toast.warning .alert-content b {
+    color: var(--warning);
+}
+
+.alert-toast.error .alert-icon,
+.alert-toast.error .alert-content b {
+    color: var(--danger);
+}
+
+.alert-toast.danger .alert-icon,
+.alert-toast.danger .alert-content b {
+    color: var(--danger);
+}
+
+.alert-content b { display: block; color: var(--success); margin-bottom: 2px; }
 .alert-content span { font-size: 0.85rem; color: var(--text-muted); }
+
+.stream-card.new-image-alert {
+    animation: new-image-pulse 1.2s ease-in-out 5;
+    border-color: var(--danger);
+}
+
+.new-event-row {
+    background: #fef2f2 !important;
+}
+
+@keyframes new-image-pulse {
+    0%, 100% { box-shadow: var(--shadow-sm); }
+    50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.18), var(--shadow-lg); }
+}
 
 /* Decoration */
 .star-decor {
@@ -816,8 +957,9 @@ input:checked + .slider:before { transform: translateX(24px); }
 
 /* Animations for danger */
 .danger-glow {
-    animation: danger-pulse 2s infinite;
+    animation: danger-pulse 1.15s infinite;
     border: 2px solid var(--danger) !important;
+    background: #fff7f7;
 }
 
 @keyframes danger-pulse {
@@ -838,4 +980,8 @@ input:checked + .slider:before { transform: translateX(24px); }
     .logo-text, .nav-item span { display: none; }
     .top-header { padding: 0 20px; }
     .view-container { padding: 0 20px 20px 20px; }
+    .status-badges { flex-direction: column; gap: 6px; }
+    .sensor-cards-grid, .stats-summary-grid { grid-template-columns: 1fr; }
+    .active-alert-banner { grid-template-columns: auto 1fr; }
+    #active-alert-time { grid-column: 2; }
 }
