@@ -36,6 +36,10 @@
                     <i data-lucide="bar-chart-2"></i>
                     <span>Thống kê</span>
                 </a>
+                <a href="#" class="nav-item" onclick="switchPage('database', event)">
+                    <i data-lucide="database"></i>
+                    <span>Database</span>
+                </a>
                 <a href="#" class="nav-item" onclick="switchPage('history', event)">
                     <i data-lucide="history"></i>
                     <span>Lịch sử</span>
@@ -241,6 +245,60 @@
                                 <canvas id="gasChart"></canvas>
                             </div>
                         </div>
+                    </div>
+                </section>
+
+                <section id="database-view" class="view">
+                    <div class="database-toolbar">
+                        <div class="database-field">
+                            <label for="database-table">Bang du lieu</label>
+                            <select id="database-table" onchange="handleDatabaseTableChange()">
+                                <option value="stroke_events">Stroke_event</option>
+                                <option value="sensor_data">sensor_data</option>
+                            </select>
+                        </div>
+                        <div class="database-field">
+                            <label for="database-start">Tu thoi gian</label>
+                            <input type="datetime-local" id="database-start">
+                        </div>
+                        <div class="database-field">
+                            <label for="database-end">Den thoi gian</label>
+                            <input type="datetime-local" id="database-end">
+                        </div>
+                        <button class="database-btn primary" type="button" onclick="loadDatabaseRows()">
+                            <i data-lucide="filter"></i>
+                            Loc
+                        </button>
+                        <button class="database-btn danger hidden" id="database-bulk-delete" type="button" onclick="deleteSensorDataByTime()">
+                            <i data-lucide="trash-2"></i>
+                            Xoa theo thoi gian
+                        </button>
+                    </div>
+
+                    <div class="database-summary">
+                        <div>
+                            <span id="database-summary-title">Stroke_event</span>
+                            <strong id="database-summary-count">0 dong</strong>
+                        </div>
+                        <span id="database-summary-note">Loc du lieu theo khoang thoi gian va xoa dong da chon.</span>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="history-table database-table">
+                            <thead id="database-table-head">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Thoi gian</th>
+                                    <th>Du lieu</th>
+                                    <th>Thao tac</th>
+                                </tr>
+                            </thead>
+                            <tbody id="database-table-body">
+                                <tr>
+                                    <td colspan="4">Chon bo loc de tai du lieu...</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </section>
 

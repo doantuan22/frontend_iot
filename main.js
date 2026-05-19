@@ -14,6 +14,7 @@ let lastBackendSensorAt = '';
 let lastToastKey = '';
 let lastImageKey = '';
 let imagesBootstrapped = false;
+let databaseRows = [];
 
 const sessionData = {
     labels: [],
@@ -39,6 +40,12 @@ function switchPage(pageId, event) {
 
     document.querySelectorAll('.view').forEach(view => view.classList.remove('active'));
     document.getElementById(`${pageId}-view`)?.classList.add('active');
+
+    if (pageId === 'database') {
+        setText('page-title', 'Database');
+        loadDatabaseRows();
+        return;
+    }
 
     const titles = { home: 'Trang chủ', stats: 'Thống kê', history: 'Lịch sử' };
     setText('page-title', titles[pageId] || 'Bảng điều khiển');
@@ -393,6 +400,162 @@ async function setThreshold(type) {
             button.disabled = false;
             button.innerText = originalText;
         }
+    }
+}
+
+function getDatabaseTable() {
+    return document.getElementById('database-table')?.value || 'stroke_events';
+}
+
+function getDatabaseRange() {
+    const startValue = document.getElementById('database-start')?.value;
+    const endValue = document.getElementById('database-end')?.value;
+    return {
+        start: startValue ? new Date(startValue).toISOString() : '',
+        end: endValue ? new Date(endValue).toISOString() : ''
+    };
+}
+
+function formatDatabaseTime(value) {
+    if (!value) return '--';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString('vi-VN');
+}
+
+function databaseColumnValue(row, keys) {
+    for (const key of keys) {
+        if (row[key] !== undefined && row[key] !== null && row[key] !== '') return row[key];
+    }
+    return '';
+}
+
+function renderDatabaseTable(table, rows) {
+    const head = document.getElementById('database-table-head');
+    const body = document.getElementById('database-table-body');
+    if (!head || !body) return;
+
+    if (table === 'sensor_data') {
+        head.innerHTML = '<tr><th>ID</th><th>Cam bien</th><th>Thong so</th><th>Canh bao</th><th>Thoi gian</th><th>Thao tac</th></tr>';
+        body.innerHTML = rows.length ? rows.map(row => {
+            const metrics = [
+                row.temperature !== null && row.temperature !== undefined ? `Nhiet do: ${escapeHtml(row.temperature)} C` : '',
+                row.humidity !== null && row.humidity !== undefined ? `Do am: ${escapeHtml(row.humidity)} %` : '',
+                row.gas_value !== null && row.gas_value !== undefined ? `Gas: ${escapeHtml(row.gas_value)} ppm` : '',
+                row.fire_detected ? 'Co lua' : ''
+            ].filter(Boolean).join('<br>');
+
+            return `<tr>
+                <td>${escapeHtml(row.id)}</td>
+                <td>${escapeHtml(row.sensor_name || '--')}</td>
+                <td>${metrics || '--'}</td>
+                <td>${escapeHtml(row.warning || '--')}</td>
+                <td>${escapeHtml(formatDatabaseTime(row.created_at))}</td>
+                <td><button class="database-icon-btn danger" type="button" onclick="deleteDatabaseRow('${table}', ${Number(row.id)})" aria-label="Xoa"><i data-lucide="trash-2"></i></button></td>
+            </tr>`;
+        }).join('') : '<tr><td colspan="6">Khong co du lieu phu hop.</td></tr>';
+        return;
+    }
+
+    head.innerHTML = '<tr><th>ID</th><th>Thoi gian</th><th>Chi tiet</th><th>Hinh anh</th><th>Thao tac</th></tr>';
+    body.innerHTML = rows.length ? rows.map(row => {
+        const time = databaseColumnValue(row, ['timestamp', 'created_at']);
+        const imageUrl = getImageUrl(row);
+        const detail = databaseColumnValue(row, ['event_type', 'label', 'description', 'warning', 'status']) || `Su kien #${row.id}`;
+
+        return `<tr>
+            <td>${escapeHtml(row.id)}</td>
+            <td>${escapeHtml(formatDatabaseTime(time))}</td>
+            <td>${escapeHtml(detail)}</td>
+            <td>${imageUrl ? `<button class="btn-view-img" onclick="window.open('${escapeHtml(imageUrl)}', '_blank')" aria-label="Xem anh"><i data-lucide="image"></i></button>` : '--'}</td>
+            <td><button class="database-icon-btn danger" type="button" onclick="deleteDatabaseRow('${table}', ${Number(row.id)})" aria-label="Xoa"><i data-lucide="trash-2"></i></button></td>
+        </tr>`;
+    }).join('') : '<tr><td colspan="5">Khong co du lieu phu hop.</td></tr>';
+}
+
+function handleDatabaseTableChange() {
+    const table = getDatabaseTable();
+    document.getElementById('database-bulk-delete')?.classList.toggle('hidden', table !== 'sensor_data');
+    setText('database-summary-title', table === 'sensor_data' ? 'sensor_data' : 'Stroke_event');
+    setText('database-summary-note', table === 'sensor_data'
+        ? 'Co the xoa hang loat sensor_data theo khoang thoi gian da chon.'
+        : 'Xoa Stroke_event se co gang xoa anh trong Storage bucket surveillance-images truoc.');
+    loadDatabaseRows();
+}
+
+async function loadDatabaseRows() {
+    const body = document.getElementById('database-table-body');
+    if (!body) return;
+
+    const table = getDatabaseTable();
+    const { start, end } = getDatabaseRange();
+    const params = new URLSearchParams({ limit: '100' });
+    if (start) params.set('start', start);
+    if (end) params.set('end', end);
+
+    body.innerHTML = '<tr><td colspan="6">Dang tai du lieu...</td></tr>';
+
+    try {
+        const res = await fetch(`${CONFIG.BACKEND_URL}/database/${table}?${params}`, { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Khong tai duoc du lieu database.');
+
+        databaseRows = data.rows || [];
+        renderDatabaseTable(table, databaseRows);
+        setText('database-summary-count', `${data.count || databaseRows.length} dong`);
+        document.getElementById('database-bulk-delete')?.classList.toggle('hidden', table !== 'sensor_data');
+        if (window.lucide) lucide.createIcons();
+    } catch (err) {
+        body.innerHTML = `<tr><td colspan="6">${escapeHtml(err.message)}</td></tr>`;
+        setText('database-summary-count', '0 dong');
+        showToast(err.message, 'error');
+    }
+}
+
+async function deleteDatabaseRow(table, id) {
+    if (!Number.isFinite(Number(id))) return;
+
+    const message = table === 'stroke_events'
+        ? 'Xoa dong nay va anh lien quan trong Storage neu tim thay?'
+        : 'Xoa dong du lieu nay?';
+    if (!confirm(message)) return;
+
+    try {
+        const res = await fetch(`${CONFIG.BACKEND_URL}/database/${table}/${id}`, { method: 'DELETE' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Khong xoa duoc dong du lieu.');
+
+        const storageText = data.storage?.deleted ? ` Da xoa anh: ${data.storage.path}` : '';
+        showToast(`Da xoa ${data.deleted || 0} dong.${storageText}`, 'success');
+        loadDatabaseRows();
+        if (table === 'stroke_events') loadImages('database-delete');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+async function deleteSensorDataByTime() {
+    const { start, end } = getDatabaseRange();
+    if (!start && !end) {
+        showToast('Can chon it nhat mot moc thoi gian de xoa sensor_data.', 'error');
+        return;
+    }
+
+    if (!confirm('Xoa tat ca dong sensor_data trong khoang thoi gian da chon?')) return;
+
+    try {
+        const res = await fetch(`${CONFIG.BACKEND_URL}/database/sensor_data`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ start, end })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Khong xoa duoc sensor_data.');
+
+        showToast(`Da xoa ${data.deleted || 0} dong sensor_data.`, 'success');
+        loadDatabaseRows();
+    } catch (err) {
+        showToast(err.message, 'error');
     }
 }
 
