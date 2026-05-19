@@ -38,7 +38,7 @@
                 </a>
                 <a href="#" class="nav-item" onclick="switchPage('database', event)">
                     <i data-lucide="database"></i>
-                    <span>Database</span>
+                    <span>Cơ sở dữ liệu</span>
                 </a>
                 <a href="#" class="nav-item" onclick="switchPage('history', event)">
                     <i data-lucide="history"></i>
@@ -178,6 +178,10 @@
                                     <i data-lucide="camera"></i>
                                     <span>Đang cập nhật hình ảnh từ Supabase</span>
                                 </div>
+                                <button class="ack-image-btn hidden" id="ack-image-alert-btn" type="button" onclick="acknowledgeImageAlert()">
+                                    <i data-lucide="check-circle-2"></i>
+                                    Xác nhận đã xem ảnh cảnh báo
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -186,17 +190,17 @@
                 <section id="stats-view" class="view">
                     <div class="stats-filters">
                         <select id="time-range" aria-label="Khoảng thời gian">
-                            <option>7 ngày qua</option>
-                            <option>Hôm nay</option>
-                            <option>30 ngày qua</option>
+                            <option value="today">Hôm nay</option>
+                            <option value="7d">7 ngày gần nhất</option>
+                            <option value="30d">30 ngày gần nhất</option>
                         </select>
                         <select id="data-type" aria-label="Bộ lọc dữ liệu">
-                            <option>Dữ liệu cảm biến</option>
-                            <option>Cảnh báo</option>
+                            <option value="sensor">Thống kê cảm biến</option>
+                            <option value="stroke_event">Thống kê cảnh báo đột quỵ</option>
                         </select>
                     </div>
 
-                    <div class="stats-summary-grid">
+                    <div class="stats-summary-grid" id="sensor-stats-summary">
                         <div class="stat-card">
                             <div class="stat-icon temp"><i data-lucide="thermometer"></i></div>
                             <div class="stat-info">
@@ -231,7 +235,37 @@
                         </div>
                     </div>
 
-                    <div class="stats-charts-stack">
+                    <div class="stroke-stats-panel hidden" id="stroke-stats-panel">
+                        <div class="stats-summary-grid stroke-summary-grid">
+                            <div class="stat-card">
+                                <div class="stat-icon fire"><i data-lucide="camera"></i></div>
+                                <div class="stat-info">
+                                    <span class="stat-label">Tổng cảnh báo đột quỵ</span>
+                                    <div class="stat-value" id="stroke-total-val">0</div>
+                                    <span class="stat-desc" id="stroke-total-desc">Theo số ảnh AI gửi về</span>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon gas"><i data-lucide="calendar-days"></i></div>
+                                <div class="stat-info">
+                                    <span class="stat-label">Ngày cao nhất</span>
+                                    <div class="stat-value" id="stroke-max-val">--</div>
+                                    <span class="stat-desc" id="stroke-max-desc">0 sự kiện</span>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon humi"><i data-lucide="activity"></i></div>
+                                <div class="stat-info">
+                                    <span class="stat-label">Trung bình mỗi ngày</span>
+                                    <div class="stat-value" id="stroke-average-val">0</div>
+                                    <span class="stat-desc" id="stroke-average-desc">Sự kiện/ngày</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="stroke-frequency-list" id="stroke-frequency-list"></div>
+                    </div>
+
+                    <div class="stats-charts-stack" id="sensor-stats-charts">
                         <div class="chart-card">
                             <h3 class="chart-title">Theo dõi nhiệt độ và độ ẩm</h3>
                             <div class="chart-wrapper">
@@ -251,36 +285,36 @@
                 <section id="database-view" class="view">
                     <div class="database-toolbar">
                         <div class="database-field">
-                            <label for="database-table">Bang du lieu</label>
+                            <label for="database-table">Bảng dữ liệu</label>
                             <select id="database-table" onchange="handleDatabaseTableChange()">
                                 <option value="stroke_events">Stroke_event</option>
                                 <option value="sensor_data">sensor_data</option>
                             </select>
                         </div>
                         <div class="database-field">
-                            <label for="database-start">Tu thoi gian</label>
+                            <label for="database-start">Từ thời gian</label>
                             <input type="datetime-local" id="database-start">
                         </div>
                         <div class="database-field">
-                            <label for="database-end">Den thoi gian</label>
+                            <label for="database-end">Đến thời gian</label>
                             <input type="datetime-local" id="database-end">
                         </div>
                         <button class="database-btn primary" type="button" onclick="loadDatabaseRows()">
                             <i data-lucide="filter"></i>
-                            Loc
+                            Lọc
                         </button>
                         <button class="database-btn danger hidden" id="database-bulk-delete" type="button" onclick="deleteSensorDataByTime()">
                             <i data-lucide="trash-2"></i>
-                            Xoa theo thoi gian
+                            Xóa theo thời gian
                         </button>
                     </div>
 
                     <div class="database-summary">
                         <div>
                             <span id="database-summary-title">Stroke_event</span>
-                            <strong id="database-summary-count">0 dong</strong>
+                            <strong id="database-summary-count">0 dòng</strong>
                         </div>
-                        <span id="database-summary-note">Loc du lieu theo khoang thoi gian va xoa dong da chon.</span>
+                        <span id="database-summary-note">Lọc dữ liệu theo khoảng thời gian và xóa dòng đã chọn.</span>
                     </div>
 
                     <div class="table-container">
@@ -288,14 +322,14 @@
                             <thead id="database-table-head">
                                 <tr>
                                     <th>ID</th>
-                                    <th>Thoi gian</th>
-                                    <th>Du lieu</th>
-                                    <th>Thao tac</th>
+                                    <th>Thời gian</th>
+                                    <th>Dữ liệu</th>
+                                    <th>Thao tác</th>
                                 </tr>
                             </thead>
                             <tbody id="database-table-body">
                                 <tr>
-                                    <td colspan="4">Chon bo loc de tai du lieu...</td>
+                                    <td colspan="4">Chọn bộ lọc để tải dữ liệu...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -304,16 +338,16 @@
 
                 <section id="history-view" class="view">
                     <div class="history-controls">
-                        <div class="search-bar">
-                            <i data-lucide="search"></i>
-                            <input type="text" placeholder="Tìm kiếm sự kiện...">
-                        </div>
-                        <select aria-label="Loại sự kiện">
-                            <option>Loại sự kiện</option>
-                            <option>Camera</option>
-                            <option>Cảnh báo cảm biến</option>
+                        <select id="history-type" aria-label="Loại lịch sử">
+                            <option value="sensor">Cảnh báo cảm biến</option>
+                            <option value="images">Ảnh AI chụp</option>
                         </select>
-                        <button class="filter-btn" type="button" aria-label="Lọc dữ liệu"><i data-lucide="sliders-horizontal"></i></button>
+                        <select id="history-range" aria-label="Khoảng thời gian lịch sử">
+                            <option value="today">Hôm nay</option>
+                            <option value="7d">7 ngày gần nhất</option>
+                            <option value="30d">30 ngày gần nhất</option>
+                        </select>
+                        <button class="filter-btn" type="button" onclick="loadHistory()" aria-label="Lọc dữ liệu"><i data-lucide="sliders-horizontal"></i></button>
                     </div>
 
                     <div class="table-container">
@@ -347,7 +381,7 @@
         </main>
     </div>
 
-    <script src="main.js?v=20260517-image-realtime-fix"></script>
+    <script src="main.js?v=20260519-delete-uuid-fix"></script>
     <script>
         lucide.createIcons();
     </script>

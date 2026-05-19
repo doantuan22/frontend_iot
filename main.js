@@ -13,8 +13,11 @@ let lastChartUpdateTime = 0;
 let lastBackendSensorAt = '';
 let lastToastKey = '';
 let lastImageKey = '';
+let pendingImageAlertKey = '';
 let imagesBootstrapped = false;
 let databaseRows = [];
+let statisticsLoading = false;
+let lastStatisticsKey = '';
 
 const sessionData = {
     labels: [],
@@ -42,9 +45,17 @@ function switchPage(pageId, event) {
     document.getElementById(`${pageId}-view`)?.classList.add('active');
 
     if (pageId === 'database') {
-        setText('page-title', 'Database');
+        setText('page-title', 'Cơ sở dữ liệu');
         loadDatabaseRows();
         return;
+    }
+
+    if (pageId === 'stats') {
+        loadStatistics();
+    }
+
+    if (pageId === 'history') {
+        loadHistory();
     }
 
     const titles = { home: 'Trang chủ', stats: 'Thống kê', history: 'Lịch sử' };
@@ -61,8 +72,8 @@ function initCharts() {
         data: {
             labels: [],
             datasets: [
-                { label: 'Nhiệt độ (°C)', data: [], borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', fill: true, tension: 0.3 },
-                { label: 'Độ ẩm (%)', data: [], borderColor: '#0ea5e9', backgroundColor: 'rgba(14, 165, 233, 0.1)', fill: true, tension: 0.3 }
+                { label: 'Nhiệt độ (°C)', data: [], borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', fill: true, tension: 0.3, spanGaps: true },
+                { label: 'Độ ẩm (%)', data: [], borderColor: '#0ea5e9', backgroundColor: 'rgba(14, 165, 233, 0.1)', fill: true, tension: 0.3, spanGaps: true }
             ]
         },
         options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false } } } }
@@ -78,7 +89,8 @@ function initCharts() {
                 borderColor: '#d97706',
                 backgroundColor: 'rgba(217, 119, 6, 0.12)',
                 fill: true,
-                tension: 0.3
+                tension: 0.3,
+                spanGaps: true
             }]
         },
         options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false } } } }
@@ -314,6 +326,159 @@ function updateChartsData(time, temp, humi, gas) {
     charts.gas.update('none');
 }
 
+function initStatisticsControls() {
+    const rangeSelect = document.getElementById('time-range');
+    const typeSelect = document.getElementById('data-type');
+
+    if (rangeSelect) {
+        const rangeOptions = [
+            { value: 'today', label: 'Hôm nay' },
+            { value: '7d', label: '7 ngày gần nhất' },
+            { value: '30d', label: '30 ngày gần nhất' }
+        ];
+        Array.from(rangeSelect.options).forEach((option, index) => {
+            option.value = rangeOptions[index]?.value || option.value;
+            option.textContent = rangeOptions[index]?.label || option.textContent;
+        });
+        rangeSelect.value = 'today';
+        rangeSelect.addEventListener('change', () => loadStatistics(true));
+    }
+
+    if (typeSelect) {
+        const typeOptions = [
+            { value: 'sensor', label: 'Thống kê cảm biến' },
+            { value: 'stroke_event', label: 'Thống kê cảnh báo đột quỵ' }
+        ];
+        Array.from(typeSelect.options).forEach((option, index) => {
+            option.value = typeOptions[index]?.value || option.value;
+            option.textContent = typeOptions[index]?.label || option.textContent;
+        });
+        typeSelect.value = 'sensor';
+        typeSelect.addEventListener('change', () => loadStatistics(true));
+    }
+}
+
+function getStatisticsRange() {
+    return document.getElementById('time-range')?.value || 'today';
+}
+
+function getStatisticsType() {
+    return document.getElementById('data-type')?.value || 'sensor';
+}
+
+function formatStatNumber(value, digits = 1) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '--';
+    return Number.isInteger(number) ? String(number) : number.toFixed(digits);
+}
+
+function rangeLabel(range) {
+    if (range === '7d') return '7 ngày gần nhất';
+    if (range === '30d') return '30 ngày gần nhất';
+    return 'hôm nay';
+}
+
+function setStatisticsMode(type) {
+    const isStroke = type === 'stroke_event';
+    document.getElementById('sensor-stats-summary')?.classList.toggle('hidden', isStroke);
+    document.getElementById('sensor-stats-charts')?.classList.toggle('hidden', isStroke);
+    document.getElementById('stroke-stats-panel')?.classList.toggle('hidden', !isStroke);
+}
+
+function chartMetricPoints(points, key) {
+    return points
+        .filter(point => Number.isFinite(Number(point[key])))
+        .map(point => ({ x: point.label, y: Number(point[key]) }));
+}
+
+function renderSensorStatistics(data) {
+    const summary = data.summary || {};
+    const points = Array.isArray(data.points) ? data.points : [];
+    const label = rangeLabel(data.range);
+
+    setStatisticsMode('sensor');
+    setText('stats-temp-val', `${formatStatNumber(summary.avgTemperature)} °C`);
+    setText('stats-gas-val', `${formatStatNumber(summary.avgGas, 0)} ppm`);
+    setText('stats-humi-val', `${formatStatNumber(summary.avgHumidity)} %`);
+    setText('stats-fire-count', summary.alertCount || 0);
+    setText('stats-temp-desc', `Dữ liệu ${label}`);
+    setText('stats-gas-desc', `Dữ liệu ${label}`);
+    setText('stats-humi-desc', `Dữ liệu ${label}`);
+    setText('stats-fire-desc', `Cảnh báo trong ${label}`);
+
+    if (!charts.main || !charts.gas) return;
+
+    charts.main.data.labels = points.map(point => point.label);
+    charts.main.data.datasets[0].data = chartMetricPoints(points, 'temperature');
+    charts.main.data.datasets[1].data = chartMetricPoints(points, 'humidity');
+    charts.main.update();
+
+    charts.gas.data.labels = points.map(point => point.label);
+    charts.gas.data.datasets[0].data = chartMetricPoints(points, 'gas');
+    charts.gas.update();
+}
+
+function renderStrokeStatistics(data) {
+    const summary = data.summary || {};
+    const days = Array.isArray(data.days) ? data.days : [];
+    const maxCount = Math.max(1, ...days.map(day => Number(day.count) || 0));
+
+    setStatisticsMode('stroke_event');
+    setText('stroke-total-val', summary.total || 0);
+    setText('stroke-total-desc', `Theo số ảnh AI gửi về trong ${rangeLabel(data.range)}`);
+    setText('stroke-max-val', summary.maxDay?.label || '--');
+    setText('stroke-max-desc', `${summary.maxDay?.count || 0} sự kiện`);
+    setText('stroke-average-val', formatStatNumber(summary.averagePerDay || 0, 1));
+
+    const list = document.getElementById('stroke-frequency-list');
+    if (!list) return;
+
+    list.innerHTML = days.length ? days.map(day => {
+        const count = Number(day.count) || 0;
+        const width = Math.max(4, Math.round((count / maxCount) * 100));
+        return `<div class="stroke-frequency-item">
+            <div class="stroke-frequency-meta">
+                <span>${escapeHtml(day.label)}</span>
+                <strong>${count} ảnh</strong>
+            </div>
+            <div class="stroke-frequency-bar"><span style="width: ${width}%"></span></div>
+        </div>`;
+    }).join('') : '<div class="empty-state">Không có dữ liệu đột quỵ trong khoảng thời gian này.</div>';
+}
+
+async function loadStatistics(force = false) {
+    const statsViewActive = document.getElementById('stats-view')?.classList.contains('active');
+    if (!statsViewActive && !force) return;
+    if (statisticsLoading) return;
+
+    const type = getStatisticsType();
+    const range = getStatisticsRange();
+    const key = `${type}-${range}`;
+    if (!force && key === lastStatisticsKey && Date.now() - lastChartUpdateTime < 10000) return;
+
+    statisticsLoading = true;
+    lastStatisticsKey = key;
+
+    try {
+        const params = new URLSearchParams({ type, range });
+        const res = await fetch(`${CONFIG.BACKEND_URL}/statistics?${params}`, { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Không tải được dữ liệu thống kê.');
+
+        if (data.type === 'stroke_event') {
+            renderStrokeStatistics(data);
+        } else {
+            renderSensorStatistics(data);
+        }
+
+        lastChartUpdateTime = Date.now();
+    } catch (err) {
+        showToast(err.message, 'error');
+    } finally {
+        statisticsLoading = false;
+    }
+}
+
 function updateConnectionBadges(health) {
     const mqttOnline = !!health.mqtt;
     const supabaseOnline = !!(health.supabaseStatus?.connected ?? health.supabase);
@@ -346,12 +511,8 @@ async function checkBackendStatus() {
 
         if (latestSensor.updatedAt && latestSensor.updatedAt !== lastBackendSensorAt) {
             updateSensorCards(sensorData, timeText);
-            updateStatsSummary();
-            if (Date.now() - lastChartUpdateTime >= 30000) {
-                updateChartsData(timeText, sensorData.temp, sensorData.humi, sensorData.gas);
-                lastChartUpdateTime = Date.now();
-            }
             lastBackendSensorAt = latestSensor.updatedAt;
+            loadStatistics();
         }
 
         updateAlertUI(buildAlertInfo(sensorData, data.latestAlert), timeText);
@@ -411,14 +572,15 @@ function getDatabaseRange() {
     const startValue = document.getElementById('database-start')?.value;
     const endValue = document.getElementById('database-end')?.value;
     return {
-        start: startValue ? new Date(startValue).toISOString() : '',
-        end: endValue ? new Date(endValue).toISOString() : ''
+        start: startValue ? `${startValue}:00` : '',
+        end: endValue ? `${endValue}:59` : ''
     };
 }
 
 function formatDatabaseTime(value) {
     if (!value) return '--';
-    const date = new Date(value);
+    const text = String(value);
+    const date = new Date(/[zZ]|[+-]\d{2}:\d{2}$/.test(text) ? text : text.replace(' ', 'T'));
     if (Number.isNaN(date.getTime())) return String(value);
     return date.toLocaleString('vi-VN');
 }
@@ -430,19 +592,26 @@ function databaseColumnValue(row, keys) {
     return '';
 }
 
+function inlineJsString(value) {
+    const text = String(value ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'");
+    return `'${text}'`;
+}
+
 function renderDatabaseTable(table, rows) {
     const head = document.getElementById('database-table-head');
     const body = document.getElementById('database-table-body');
     if (!head || !body) return;
 
     if (table === 'sensor_data') {
-        head.innerHTML = '<tr><th>ID</th><th>Cam bien</th><th>Thong so</th><th>Canh bao</th><th>Thoi gian</th><th>Thao tac</th></tr>';
+        head.innerHTML = '<tr><th>ID</th><th>Cảm biến</th><th>Thông số</th><th>Cảnh báo</th><th>Thời gian</th><th>Thao tác</th></tr>';
         body.innerHTML = rows.length ? rows.map(row => {
             const metrics = [
-                row.temperature !== null && row.temperature !== undefined ? `Nhiet do: ${escapeHtml(row.temperature)} C` : '',
-                row.humidity !== null && row.humidity !== undefined ? `Do am: ${escapeHtml(row.humidity)} %` : '',
+                row.temperature !== null && row.temperature !== undefined ? `Nhiệt độ: ${escapeHtml(row.temperature)} °C` : '',
+                row.humidity !== null && row.humidity !== undefined ? `Độ ẩm: ${escapeHtml(row.humidity)} %` : '',
                 row.gas_value !== null && row.gas_value !== undefined ? `Gas: ${escapeHtml(row.gas_value)} ppm` : '',
-                row.fire_detected ? 'Co lua' : ''
+                row.fire_detected ? 'Có lửa' : ''
             ].filter(Boolean).join('<br>');
 
             return `<tr>
@@ -451,26 +620,26 @@ function renderDatabaseTable(table, rows) {
                 <td>${metrics || '--'}</td>
                 <td>${escapeHtml(row.warning || '--')}</td>
                 <td>${escapeHtml(formatDatabaseTime(row.created_at))}</td>
-                <td><button class="database-icon-btn danger" type="button" onclick="deleteDatabaseRow('${table}', ${Number(row.id)})" aria-label="Xoa"><i data-lucide="trash-2"></i></button></td>
+                <td><button class="database-icon-btn danger" type="button" onclick="deleteDatabaseRow('${table}', ${inlineJsString(row.id)})" aria-label="Xóa"><i data-lucide="trash-2"></i></button></td>
             </tr>`;
-        }).join('') : '<tr><td colspan="6">Khong co du lieu phu hop.</td></tr>';
+        }).join('') : '<tr><td colspan="6">Không có dữ liệu phù hợp.</td></tr>';
         return;
     }
 
-    head.innerHTML = '<tr><th>ID</th><th>Thoi gian</th><th>Chi tiet</th><th>Hinh anh</th><th>Thao tac</th></tr>';
+    head.innerHTML = '<tr><th>ID</th><th>Thời gian</th><th>Chi tiết</th><th>Hình ảnh</th><th>Thao tác</th></tr>';
     body.innerHTML = rows.length ? rows.map(row => {
         const time = databaseColumnValue(row, ['timestamp', 'created_at']);
         const imageUrl = getImageUrl(row);
-        const detail = databaseColumnValue(row, ['event_type', 'label', 'description', 'warning', 'status']) || `Su kien #${row.id}`;
+        const detail = databaseColumnValue(row, ['event_type', 'label', 'description', 'warning', 'status']) || `Sự kiện #${row.id}`;
 
         return `<tr>
             <td>${escapeHtml(row.id)}</td>
             <td>${escapeHtml(formatDatabaseTime(time))}</td>
             <td>${escapeHtml(detail)}</td>
-            <td>${imageUrl ? `<button class="btn-view-img" onclick="window.open('${escapeHtml(imageUrl)}', '_blank')" aria-label="Xem anh"><i data-lucide="image"></i></button>` : '--'}</td>
-            <td><button class="database-icon-btn danger" type="button" onclick="deleteDatabaseRow('${table}', ${Number(row.id)})" aria-label="Xoa"><i data-lucide="trash-2"></i></button></td>
+            <td>${imageUrl ? `<button class="btn-view-img" onclick="window.open('${escapeHtml(imageUrl)}', '_blank')" aria-label="Xem ảnh"><i data-lucide="image"></i></button>` : '--'}</td>
+            <td><button class="database-icon-btn danger" type="button" onclick="deleteDatabaseRow('${table}', ${inlineJsString(row.id)})" aria-label="Xóa"><i data-lucide="trash-2"></i></button></td>
         </tr>`;
-    }).join('') : '<tr><td colspan="5">Khong co du lieu phu hop.</td></tr>';
+    }).join('') : '<tr><td colspan="5">Không có dữ liệu phù hợp.</td></tr>';
 }
 
 function handleDatabaseTableChange() {
@@ -478,8 +647,8 @@ function handleDatabaseTableChange() {
     document.getElementById('database-bulk-delete')?.classList.toggle('hidden', table !== 'sensor_data');
     setText('database-summary-title', table === 'sensor_data' ? 'sensor_data' : 'Stroke_event');
     setText('database-summary-note', table === 'sensor_data'
-        ? 'Co the xoa hang loat sensor_data theo khoang thoi gian da chon.'
-        : 'Xoa Stroke_event se co gang xoa anh trong Storage bucket surveillance-images truoc.');
+        ? 'Có thể xóa hàng loạt sensor_data theo khoảng thời gian đã chọn.'
+        : 'Xóa Stroke_event sẽ cố gắng xóa ảnh trong Storage bucket surveillance-images trước.');
     loadDatabaseRows();
 }
 
@@ -493,40 +662,44 @@ async function loadDatabaseRows() {
     if (start) params.set('start', start);
     if (end) params.set('end', end);
 
-    body.innerHTML = '<tr><td colspan="6">Dang tai du lieu...</td></tr>';
+    body.innerHTML = '<tr><td colspan="6">Đang tải dữ liệu...</td></tr>';
 
     try {
         const res = await fetch(`${CONFIG.BACKEND_URL}/database/${table}?${params}`, { cache: 'no-store' });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'Khong tai duoc du lieu database.');
+        if (!res.ok) throw new Error(data.error || 'Không tải được dữ liệu database.');
 
         databaseRows = data.rows || [];
         renderDatabaseTable(table, databaseRows);
-        setText('database-summary-count', `${data.count || databaseRows.length} dong`);
+        setText('database-summary-count', `${data.count || databaseRows.length} dòng`);
         document.getElementById('database-bulk-delete')?.classList.toggle('hidden', table !== 'sensor_data');
         if (window.lucide) lucide.createIcons();
     } catch (err) {
         body.innerHTML = `<tr><td colspan="6">${escapeHtml(err.message)}</td></tr>`;
-        setText('database-summary-count', '0 dong');
+        setText('database-summary-count', '0 dòng');
         showToast(err.message, 'error');
     }
 }
 
 async function deleteDatabaseRow(table, id) {
-    if (!Number.isFinite(Number(id))) return;
+    const rowId = String(id ?? '').trim();
+    if (!rowId) {
+        showToast('Không tìm thấy ID của dòng cần xóa.', 'error');
+        return;
+    }
 
     const message = table === 'stroke_events'
-        ? 'Xoa dong nay va anh lien quan trong Storage neu tim thay?'
-        : 'Xoa dong du lieu nay?';
+        ? 'Xóa dòng này và ảnh liên quan trong Storage nếu tìm thấy?'
+        : 'Xóa dòng dữ liệu này?';
     if (!confirm(message)) return;
 
     try {
-        const res = await fetch(`${CONFIG.BACKEND_URL}/database/${table}/${id}`, { method: 'DELETE' });
+        const res = await fetch(`${CONFIG.BACKEND_URL}/database/${table}/${encodeURIComponent(rowId)}`, { method: 'DELETE' });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'Khong xoa duoc dong du lieu.');
+        if (!res.ok) throw new Error(data.error || 'Không xóa được dòng dữ liệu.');
 
-        const storageText = data.storage?.deleted ? ` Da xoa anh: ${data.storage.path}` : '';
-        showToast(`Da xoa ${data.deleted || 0} dong.${storageText}`, 'success');
+        const storageText = data.storage?.deleted ? ` Đã xóa ảnh: ${data.storage.path}` : '';
+        showToast(`Đã xóa ${data.deleted || 0} dòng.${storageText}`, 'success');
         loadDatabaseRows();
         if (table === 'stroke_events') loadImages('database-delete');
     } catch (err) {
@@ -537,11 +710,11 @@ async function deleteDatabaseRow(table, id) {
 async function deleteSensorDataByTime() {
     const { start, end } = getDatabaseRange();
     if (!start && !end) {
-        showToast('Can chon it nhat mot moc thoi gian de xoa sensor_data.', 'error');
+        showToast('Cần chọn ít nhất một mốc thời gian để xóa sensor_data.', 'error');
         return;
     }
 
-    if (!confirm('Xoa tat ca dong sensor_data trong khoang thoi gian da chon?')) return;
+    if (!confirm('Xóa tất cả dòng sensor_data trong khoảng thời gian đã chọn?')) return;
 
     try {
         const res = await fetch(`${CONFIG.BACKEND_URL}/database/sensor_data`, {
@@ -550,11 +723,89 @@ async function deleteSensorDataByTime() {
             body: JSON.stringify({ start, end })
         });
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'Khong xoa duoc sensor_data.');
+        if (!res.ok) throw new Error(data.error || 'Không xóa được sensor_data.');
 
-        showToast(`Da xoa ${data.deleted || 0} dong sensor_data.`, 'success');
+        showToast(`Đã xóa ${data.deleted || 0} dòng sensor_data.`, 'success');
         loadDatabaseRows();
     } catch (err) {
+        showToast(err.message, 'error');
+    }
+}
+
+function initHistoryControls() {
+    document.getElementById('history-type')?.addEventListener('change', () => loadHistory());
+    document.getElementById('history-range')?.addEventListener('change', () => loadHistory());
+}
+
+function getHistoryType() {
+    return document.getElementById('history-type')?.value || 'sensor';
+}
+
+function getHistoryRange() {
+    return document.getElementById('history-range')?.value || 'today';
+}
+
+function sensorMetricsText(row = {}) {
+    return [
+        row.temperature !== null && row.temperature !== undefined ? `Nhiệt độ: ${row.temperature} °C` : '',
+        row.humidity !== null && row.humidity !== undefined ? `Độ ẩm: ${row.humidity} %` : '',
+        row.gas_value !== null && row.gas_value !== undefined ? `Gas: ${row.gas_value} ppm` : '',
+        row.fire_detected ? 'Phát hiện lửa' : ''
+    ].filter(Boolean).join('<br>');
+}
+
+function renderHistoryTable(type, rows) {
+    const body = document.getElementById('history-table-body');
+    if (!body) return;
+
+    if (type === 'images') {
+        body.innerHTML = rows.length ? rows.map(item => {
+            const url = getImageUrl(item);
+            const time = new Date(item.timestamp || item.created_at).toLocaleString('vi-VN');
+            const detail = databaseColumnValue(item, ['event_type', 'label', 'description', 'status']) || `Sự kiện #${item.id}`;
+            return `<tr>
+                <td>${escapeHtml(time)}</td>
+                <td>Ảnh AI chụp</td>
+                <td>${escapeHtml(detail)}</td>
+                <td>${url ? `<button class="btn-view-img" onclick="window.open('${escapeHtml(url)}', '_blank')" aria-label="Xem ảnh"><i data-lucide="image"></i></button>` : '--'}</td>
+            </tr>`;
+        }).join('') : '<tr><td colspan="4">Không có ảnh AI trong khoảng thời gian này.</td></tr>';
+    } else {
+        body.innerHTML = rows.length ? rows.map(row => {
+            const metrics = sensorMetricsText(row);
+            const detail = [metrics, row.warning ? escapeHtml(row.warning) : ''].filter(Boolean).join('<br>');
+            return `<tr>
+                <td>${escapeHtml(formatDatabaseTime(row.created_at))}</td>
+                <td>Cảnh báo cảm biến</td>
+                <td>${detail || '--'}</td>
+                <td>--</td>
+            </tr>`;
+        }).join('') : '<tr><td colspan="4">Không có cảnh báo cảm biến trong khoảng thời gian này.</td></tr>';
+    }
+
+    if (window.lucide) lucide.createIcons();
+}
+
+async function loadHistory() {
+    const body = document.getElementById('history-table-body');
+    if (!body) return;
+
+    const type = getHistoryType();
+    const range = getHistoryRange();
+    body.innerHTML = '<tr><td colspan="4">Đang tải lịch sử...</td></tr>';
+
+    try {
+        const params = new URLSearchParams({ type, range, limit: '500' });
+        const res = await fetch(`${CONFIG.BACKEND_URL}/history?${params}`, { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Không tải được lịch sử.');
+
+        const rows = data.rows || [];
+        renderHistoryTable(type, rows);
+        setText('total-records', `Tổng cộng: ${data.count ?? rows.length}`);
+    } catch (err) {
+        body.innerHTML = `<tr><td colspan="4">${escapeHtml(err.message)}</td></tr>`;
+        setText('total-records', 'Tổng cộng: 0');
         showToast(err.message, 'error');
     }
 }
@@ -596,11 +847,24 @@ function cacheBustedUrl(url, key) {
     return `${url}${separator}v=${encodeURIComponent(key || Date.now())}`;
 }
 
-function notifyNewImage(item) {
+function setImageAlertState(active, key = '') {
     const streamCard = document.querySelector('.stream-card');
-    streamCard?.classList.add('new-image-alert');
-    setTimeout(() => streamCard?.classList.remove('new-image-alert'), 6000);
+    const button = document.getElementById('ack-image-alert-btn');
+    streamCard?.classList.toggle('new-image-alert', active);
+    button?.classList.toggle('hidden', !active);
+    pendingImageAlertKey = active ? key : '';
+}
 
+function acknowledgeImageAlert() {
+    if (pendingImageAlertKey) {
+        localStorage.setItem('acknowledgedImageKey', pendingImageAlertKey);
+    }
+    setImageAlertState(false);
+}
+
+function notifyNewImage(item) {
+    const key = getImageKey(item);
+    setImageAlertState(true, key);
     const time = new Date(item.timestamp || item.created_at || Date.now()).toLocaleString('vi-VN');
     showToast(`AI đã phát hiện sự kiện và cập nhật ảnh mới lúc ${time}.`, 'danger');
 }
@@ -621,19 +885,11 @@ async function loadImages(source = 'poll') {
         if (img && latestUrl) img.src = displayUrl;
         if (overlay && latestUrl) overlay.src = displayUrl;
 
-        const body = document.getElementById('history-table-body');
-        if (body) {
-            body.innerHTML = data.map(item => {
-                const url = getImageUrl(item);
-                const time = new Date(item.timestamp || item.created_at).toLocaleString('vi-VN');
-                const rowClass = getImageKey(item) === latestKey && hasNewImage ? ' class="new-event-row"' : '';
-                return `<tr${rowClass}><td>${escapeHtml(time)}</td><td>Camera</td><td>Sự kiện #${escapeHtml(item.id)}</td><td><button class="btn-view-img" onclick="window.open('${escapeHtml(url)}', '_blank')" aria-label="Xem ảnh"><i data-lucide="image"></i></button></td></tr>`;
-            }).join('');
-            setText('total-records', `Tổng cộng: ${data.length}`);
-            if (window.lucide) lucide.createIcons();
+        if (hasNewImage) {
+            notifyNewImage(latest);
+            if (getHistoryType() === 'images') loadHistory();
         }
-
-        if (hasNewImage) notifyNewImage(latest);
+        if (pendingImageAlertKey && latestKey === pendingImageAlertKey) setImageAlertState(true, pendingImageAlertKey);
         lastImageKey = latestKey;
         imagesBootstrapped = true;
     } catch (e) {
@@ -656,8 +912,12 @@ window.addEventListener('DOMContentLoaded', () => {
     setText('cloud-status', 'Đang kiểm tra');
     initSupabaseRealtime();
     initCharts();
+    initStatisticsControls();
+    initHistoryControls();
     loadImages();
+    loadHistory();
     checkBackendStatus();
     setInterval(checkBackendStatus, 2000);
+    setInterval(() => loadStatistics(), 15000);
     setInterval(() => loadImages('poll'), 2000);
 });
