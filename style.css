@@ -57,8 +57,8 @@ body {
     height: var(--header-height);
     display: flex;
     align-items: center;
-    padding: 0 24px;
-    gap: 16px;
+    padding: 0 18px;
+    gap: 14px;
 }
 
 .hamburger {
@@ -69,13 +69,20 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
 }
 
-.logo-text {
-    font-size: 1.25rem;
-    font-weight: 800;
-    color: var(--primary);
-    letter-spacing: -0.02em;
+.logo-img {
+    width: 108%;
+    height: 108px;
+    object-fit: contain;
+    display: block;
+    flex: 0 0 64px;
+    margin-left: 6%;
+    border-radius: 14px;
+    transform: translateY(4px);
 }
 
 .sidebar-nav {
@@ -383,6 +390,20 @@ body {
     font-size: 1rem;
     color: var(--text-muted);
     margin-left: 4px;
+}
+
+.card-threshold {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    margin-bottom: 8px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    color: var(--text-main);
+    font-size: 0.75rem;
+    font-weight: 600;
 }
 
 .card-footer {
@@ -1193,7 +1214,10 @@ input:checked + .slider:before { transform: translateX(24px); }
 
 @media (max-width: 768px) {
     .sidebar { width: 80px; }
-    .logo-text, .nav-item span { display: none; }
+    .sidebar-header { padding: 0 8px; gap: 4px; }
+    .hamburger { width: 30px; height: 30px; flex-basis: 30px; }
+    .logo-img { width: 42px; height: 42px; flex-basis: 42px; margin-left: 0; border-radius: 10px; transform: translateY(3px); }
+    .nav-item span { display: none; }
     .top-header { padding: 0 20px; }
     .view-container { padding: 0 20px 20px 20px; }
     .status-badges { flex-direction: column; gap: 6px; }

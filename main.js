@@ -166,6 +166,32 @@ function getThreshold(type) {
     return Number.isFinite(value) ? value : fallback[type];
 }
 
+function formatThresholdValue(value, unit, digits = 1) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '--';
+    const displayValue = Number.isInteger(number) ? number : number.toFixed(digits);
+    return `${displayValue} ${unit}`;
+}
+
+function updateThresholdDisplays(sensorData = {}) {
+    const thresholds = sensorData.thresholds || {};
+    const tempThreshold = thresholds.temp ?? getThreshold('temp');
+    const humiThreshold = thresholds.humi ?? getThreshold('humi');
+    const gasThreshold = thresholds.gas ?? getThreshold('gas');
+
+    setText('temp-threshold', `Ngưỡng: ${formatThresholdValue(tempThreshold, '°C')}`);
+    setText('gas-threshold', `Ngưỡng: ${formatThresholdValue(gasThreshold, 'ppm', 0)}`);
+    setText('humi-threshold', `Ngưỡng: ${formatThresholdValue(humiThreshold, '%')}`);
+    setText('fire-threshold', 'Giới hạn: phát hiện lửa');
+}
+
+function initThresholdDisplays() {
+    ['temp-limit-input', 'gas-limit-input', 'humi-limit-input'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', () => updateThresholdDisplays());
+    });
+    updateThresholdDisplays();
+}
+
 function inferAlertType(message = '') {
     const text = alertText(message);
     if (text.includes('lửa') || text.includes('lua') || text.includes('cháy') || text.includes('chay') || text.includes('fire') || text.includes('flame')) return 'fire';
@@ -268,6 +294,8 @@ function updateAlertUI(alertInfo, timeText = '') {
 }
 
 function updateSensorCards(data, timeText) {
+    updateThresholdDisplays(data);
+
     if (data.temp !== undefined) {
         setText('temp-val', data.temp.toFixed(1));
         setText('temp-time', `Cập nhật lúc ${timeText}`);
@@ -913,6 +941,7 @@ window.addEventListener('DOMContentLoaded', () => {
     initSupabaseRealtime();
     initCharts();
     initStatisticsControls();
+    initThresholdDisplays();
     initHistoryControls();
     loadImages();
     loadHistory();
