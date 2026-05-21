@@ -1,5 +1,5 @@
 const CONFIG = {
-    BACKEND_URL: 'http://localhost:3001/api',
+    BACKEND_URL: 'https://backend-iot-0ud5.onrender.com/api',
     SUPABASE_URL: 'https://ypddfcoesrtvjabyqqta.supabase.co',
     SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwZGRmY29lc3J0dmphYnlxcXRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzMDMwODcsImV4cCI6MjA5Mzg3OTA4N30.K_muE0c9BaWsyTXHU4qJg1BnMN-qJP8Evam1_kIZss8'
 };
