@@ -21,6 +21,8 @@ const CONFIG = {
     SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwZGRmY29lc3J0dmphYnlxcXRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzMDMwODcsImV4cCI6MjA5Mzg3OTA4N30.K_muE0c9BaWsyTXHU4qJg1BnMN-qJP8Evam1_kIZss8'
 };
 
+const STALE_IMAGE_MAX_AGE_MS = 5 * 60 * 1000;
+const STALE_IMAGE_GIF_URL = 'GIF/mohamed_hassan-satellite-11050.gif';
 const INACTIVE_ALERT_VALUES = new Set(['0', 'false', 'no', 'none', 'ok', 'safe', 'normal', 'off']);
 const ACTIVE_ALERT_VALUES = new Set(['1', 'true', 'yes', 'danger', 'alert', 'warning', 'fire', 'gas', 'temp', 'temperature', 'humidity']);
 
@@ -30,6 +32,7 @@ let lastChartUpdateTime = 0;
 let lastBackendSensorAt = '';
 let lastToastKey = '';
 let lastImageKey = '';
+let lastLoadedImage = null;
 let pendingImageAlertKey = '';
 let imagesBootstrapped = false;
 let databaseRows = [];
@@ -771,9 +774,9 @@ function getDatabaseRange() {
 
 function formatDatabaseTime(value) {
     if (!value) return '--';
-    const text = String(value);
-    const date = new Date(/[zZ]|[+-]\d{2}:\d{2}$/.test(text) ? text : text.replace(' ', 'T'));
-    if (Number.isNaN(date.getTime())) return String(value);
+    const time = parseVietnamTimestamp(value);
+    if (!Number.isFinite(time)) return String(value);
+    const date = new Date(time);
     return date.toLocaleString('vi-VN');
 }
 
@@ -828,7 +831,7 @@ function renderDatabaseTable(table, rows) {
             <td>${escapeHtml(row.id)}</td>
             <td>${escapeHtml(formatDatabaseTime(time))}</td>
             <td>${escapeHtml(detail)}</td>
-            <td>${imageUrl ? `<button class="btn-view-img" onclick="window.open('${escapeHtml(imageUrl)}', '_blank')" aria-label="Xem ảnh"><i data-lucide="image"></i></button>` : '--'}</td>
+            <td>${imageUrl ? `<button class="btn-view-img" type="button" data-image-url="${escapeHtml(imageUrl)}" aria-label="Xem ảnh"><i data-lucide="image"></i></button>` : '--'}</td>
             <td><button class="database-icon-btn danger" type="button" onclick="deleteDatabaseRow('${table}', ${inlineJsString(row.id)})" aria-label="Xóa"><i data-lucide="trash-2"></i></button></td>
         </tr>`;
     }).join('') : '<tr><td colspan="5">Không có dữ liệu phù hợp.</td></tr>';
@@ -934,6 +937,16 @@ function initHistoryControls() {
     document.getElementById('history-range')?.addEventListener('change', () => loadHistory());
 }
 
+function initImageViewButtons() {
+    document.addEventListener('click', event => {
+        const button = event.target.closest?.('.btn-view-img[data-image-url]');
+        if (!button) return;
+
+        const imageUrl = button.dataset.imageUrl;
+        if (imageUrl) window.open(imageUrl, '_blank', 'noopener');
+    });
+}
+
 function getHistoryType() {
     return document.getElementById('history-type')?.value || 'sensor';
 }
@@ -958,13 +971,13 @@ function renderHistoryTable(type, rows) {
     if (type === 'images') {
         body.innerHTML = rows.length ? rows.map(item => {
             const url = getImageUrl(item);
-            const time = new Date(item.timestamp || item.created_at).toLocaleString('vi-VN');
+            const time = formatDatabaseTime(getImageTimestamp(item));
             const detail = databaseColumnValue(item, ['event_type', 'label', 'description', 'status']) || `Sự kiện #${item.id}`;
             return `<tr>
                 <td>${escapeHtml(time)}</td>
                 <td>Ảnh AI chụp</td>
                 <td>${escapeHtml(detail)}</td>
-                <td>${url ? `<button class="btn-view-img" onclick="window.open('${escapeHtml(url)}', '_blank')" aria-label="Xem ảnh"><i data-lucide="image"></i></button>` : '--'}</td>
+                <td>${url ? `<button class="btn-view-img" type="button" data-image-url="${escapeHtml(url)}" aria-label="Xem ảnh"><i data-lucide="image"></i></button>` : '--'}</td>
             </tr>`;
         }).join('') : '<tr><td colspan="4">Không có ảnh AI trong khoảng thời gian này.</td></tr>';
     } else {
@@ -1038,6 +1051,64 @@ function getImageKey(item = {}) {
     return String(firstDefined(item.id, item.created_at, item.timestamp, getImageUrl(item), ''));
 }
 
+function getImageTimestamp(item = {}) {
+    return firstDefined(item.timestamp, item.created_at, item.createdAt);
+}
+
+function parseVietnamTimestamp(value) {
+    if (value instanceof Date) return value.getTime();
+    if (value === undefined || value === null || value === '') return NaN;
+
+    if (typeof value === 'number') {
+        return value < 10000000000 ? value * 1000 : value;
+    }
+
+    const raw = String(value).trim();
+    if (!raw) return NaN;
+    if (/^\d+$/.test(raw)) {
+        const number = Number(raw);
+        return number < 10000000000 ? number * 1000 : number;
+    }
+
+    const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+    const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+    const vietnamTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(normalized) && !hasTimezone
+        ? `${normalized}+07:00`
+        : raw;
+
+    return Date.parse(vietnamTime);
+}
+
+function isImageStale(item = {}) {
+    const imageTime = parseVietnamTimestamp(getImageTimestamp(item));
+    return Number.isFinite(imageTime) && Date.now() - imageTime > STALE_IMAGE_MAX_AGE_MS;
+}
+
+function setStreamImageSource(mainUrl, overlayUrl = mainUrl) {
+    const img = document.getElementById('latest-img');
+    const overlay = document.getElementById('overlay-img');
+    if (img && mainUrl) img.src = mainUrl;
+    if (overlay && overlayUrl) overlay.src = overlayUrl;
+}
+
+function getMainImageDisplayUrl(item = {}) {
+    const latestUrl = getImageUrl(item);
+    if (!latestUrl || isImageStale(item)) return STALE_IMAGE_GIF_URL;
+    return cacheBustedUrl(latestUrl, getImageKey(item));
+}
+
+function getLatestImageDisplayUrl(item = {}) {
+    const latestUrl = getImageUrl(item);
+    return latestUrl ? cacheBustedUrl(latestUrl, getImageKey(item)) : STALE_IMAGE_GIF_URL;
+}
+
+function updateImageStream(item) {
+    setStreamImageSource(
+        item ? getMainImageDisplayUrl(item) : STALE_IMAGE_GIF_URL,
+        item ? getLatestImageDisplayUrl(item) : STALE_IMAGE_GIF_URL
+    );
+}
+
 function cacheBustedUrl(url, key) {
     if (!url) return '';
     const separator = url.includes('?') ? '&' : '?';
@@ -1062,25 +1133,26 @@ function acknowledgeImageAlert() {
 function notifyNewImage(item) {
     const key = getImageKey(item);
     setImageAlertState(true, key);
-    const time = new Date(item.timestamp || item.created_at || Date.now()).toLocaleString('vi-VN');
+    const time = formatDatabaseTime(getImageTimestamp(item) || Date.now());
     showToast(`AI đã phát hiện sự kiện và cập nhật ảnh mới lúc ${time}.`, 'danger');
 }
 
 async function loadImages(source = 'poll') {
     try {
         const res = await fetch(CONFIG.BACKEND_URL + '/images', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        if (!Array.isArray(data) || data.length === 0) return;
+        if (!Array.isArray(data) || data.length === 0) {
+            lastLoadedImage = null;
+            updateImageStream(null);
+            return;
+        }
 
         const latest = data[0];
+        lastLoadedImage = latest;
         const latestKey = getImageKey(latest);
-        const latestUrl = getImageUrl(latest);
         const hasNewImage = imagesBootstrapped && latestKey && latestKey !== lastImageKey;
-        const img = document.getElementById('latest-img');
-        const overlay = document.getElementById('overlay-img');
-        const displayUrl = cacheBustedUrl(latestUrl, latestKey);
-        if (img && latestUrl) img.src = displayUrl;
-        if (overlay && latestUrl) overlay.src = displayUrl;
+        updateImageStream(latest);
 
         if (hasNewImage) {
             notifyNewImage(latest);
@@ -1090,6 +1162,7 @@ async function loadImages(source = 'poll') {
         lastImageKey = latestKey;
         imagesBootstrapped = true;
     } catch (e) {
+        updateImageStream(lastLoadedImage);
         console.error('Lỗi tải hình ảnh:', e);
     }
 }
@@ -1124,5 +1197,6 @@ function startApp() {
 
 window.addEventListener('DOMContentLoaded', () => {
     initAuthForm();
+    initImageViewButtons();
     restoreAuthSession();
 });
