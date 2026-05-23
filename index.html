@@ -18,7 +18,46 @@
 <body>
     <div id="alert-container"></div>
 
-    <div class="app-layout">
+    <section class="auth-screen" id="auth-screen">
+        <div class="auth-shell">
+            <div class="auth-brand">
+                <img class="auth-logo" src="logo/Web IoT.png" alt="Web IoT">
+                <div>
+                    <span class="auth-eyebrow">Hệ thống giám sát thông minh</span>
+                    <h1>Web IoT</h1>
+                    <p>Đăng nhập để theo dõi cảm biến, cảnh báo và dữ liệu mô phỏng.</p>
+                </div>
+            </div>
+
+            <form class="auth-card" id="login-form">
+                <div class="auth-card-header">
+                    <h2>Đăng nhập</h2>
+                    <span>Phân quyền Admin / User</span>
+                </div>
+                <div class="auth-field">
+                    <label for="login-username">Tài khoản</label>
+                    <div class="auth-input">
+                        <i data-lucide="user"></i>
+                        <input type="text" id="login-username" autocomplete="username" required>
+                    </div>
+                </div>
+                <div class="auth-field">
+                    <label for="login-password">Mật khẩu</label>
+                    <div class="auth-input">
+                        <i data-lucide="lock-keyhole"></i>
+                        <input type="password" id="login-password" autocomplete="current-password" required>
+                    </div>
+                </div>
+                <button class="auth-submit" type="submit">
+                    <i data-lucide="log-in"></i>
+                    Đăng nhập
+                </button>
+                <p class="auth-error" id="login-error"></p>
+            </form>
+        </div>
+    </section>
+
+    <div class="app-layout hidden" id="app-layout">
         <aside class="sidebar">
             <div class="sidebar-header">
                 <button class="hamburger" type="button" aria-label="Mở menu">
@@ -36,7 +75,7 @@
                     <i data-lucide="bar-chart-2"></i>
                     <span>Thống kê</span>
                 </a>
-                <a href="#" class="nav-item" onclick="switchPage('database', event)">
+                <a href="#" class="nav-item admin-only" data-role="admin" onclick="switchPage('database', event)">
                     <i data-lucide="database"></i>
                     <span>Cơ sở dữ liệu</span>
                 </a>
@@ -59,6 +98,13 @@
                         <span class="dot" id="cloud-dot"></span>
                         Supabase: <span id="cloud-status">Đang kiểm tra</span>
                     </div>
+                    <div class="status-badge user-badge">
+                        <i data-lucide="user-circle"></i>
+                        <span id="current-user-label">--</span>
+                    </div>
+                    <button class="logout-btn" type="button" onclick="logout()" aria-label="Đăng xuất">
+                        <i data-lucide="log-out"></i>
+                    </button>
                 </div>
             </header>
 
@@ -385,7 +431,7 @@
         </main>
     </div>
 
-    <script src="main.js?v=20260519-delete-uuid-fix"></script>
+    <script src="main.js?v=20260523-auth-deploy"></script>
     <script>
         lucide.createIcons();
     </script>

@@ -1,5 +1,22 @@
+const DEPLOYED_BACKEND_URL = 'https://backend-iot-0ud5.onrender.com/api';
+
+function resolveBackendUrl() {
+    const customUrl = window.APP_CONFIG?.BACKEND_URL || window.BACKEND_URL;
+    if (customUrl) return String(customUrl).replace(/\/$/, '');
+
+    const isLocal = window.location.protocol === 'file:'
+        || ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    if (isLocal) return 'http://localhost:3001/api';
+
+    if (window.location.hostname.includes('backend-iot')) {
+        return `${window.location.origin}/api`;
+    }
+
+    return DEPLOYED_BACKEND_URL;
+}
+
 const CONFIG = {
-    BACKEND_URL: 'https://backend-iot-0ud5.onrender.com/api',
+    BACKEND_URL: resolveBackendUrl(),
     SUPABASE_URL: 'https://ypddfcoesrtvjabyqqta.supabase.co',
     SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlwZGRmY29lc3J0dmphYnlxcXRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzMDMwODcsImV4cCI6MjA5Mzg3OTA4N30.K_muE0c9BaWsyTXHU4qJg1BnMN-qJP8Evam1_kIZss8'
 };
@@ -18,6 +35,58 @@ let imagesBootstrapped = false;
 let databaseRows = [];
 let statisticsLoading = false;
 let lastStatisticsKey = '';
+let currentUser = null;
+let appStarted = false;
+let appIntervals = [];
+
+function destroyCharts() {
+    if (charts.main) {
+        charts.main.destroy();
+        charts.main = null;
+    }
+    if (charts.gas) {
+        charts.gas.destroy();
+        charts.gas = null;
+    }
+
+    if (typeof Chart !== 'undefined') {
+        ['mainChart', 'gasChart'].forEach(id => {
+            const existingChart = Chart.getChart?.(id);
+            if (existingChart) existingChart.destroy();
+        });
+    }
+}
+
+function getAuthToken() {
+    return localStorage.getItem('iotAuthToken') || '';
+}
+
+function setAuthSession(token, user) {
+    if (token) localStorage.setItem('iotAuthToken', token);
+    currentUser = user || null;
+}
+
+function clearAuthSession() {
+    localStorage.removeItem('iotAuthToken');
+    currentUser = null;
+}
+
+function authHeaders() {
+    const token = getAuthToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function apiFetch(path, options = {}) {
+    const headers = {
+        ...(options.headers || {}),
+        ...authHeaders()
+    };
+    return fetch(`${CONFIG.BACKEND_URL}${path}`, { ...options, headers });
+}
+
+function hasRole(role) {
+    return currentUser?.role === role;
+}
 
 const sessionData = {
     labels: [],
@@ -35,6 +104,11 @@ const sessionData = {
 
 function switchPage(pageId, event) {
     if (event) event.preventDefault();
+    if (pageId === 'database' && !hasRole('admin')) {
+        showToast('Tài khoản user không có quyền truy cập database.', 'error');
+        switchPage('home');
+        return;
+    }
     document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
     const activeNav = Array.from(document.querySelectorAll('.nav-item')).find(item =>
         item.getAttribute('onclick') && item.getAttribute('onclick').includes(pageId)
@@ -66,6 +140,8 @@ function initCharts() {
     const mainCanvas = document.getElementById('mainChart');
     const gasCanvas = document.getElementById('gasChart');
     if (!mainCanvas || !gasCanvas) return;
+
+    destroyCharts();
 
     charts.main = new Chart(mainCanvas.getContext('2d'), {
         type: 'line',
@@ -100,6 +176,94 @@ function initCharts() {
 function setText(id, value) {
     const el = document.getElementById(id);
     if (el) el.innerText = value;
+}
+
+function applyAuthUI() {
+    const isAdmin = hasRole('admin');
+    const roleLabel = currentUser?.role === 'admin' ? 'Quản trị viên' : 'Người dùng';
+    document.getElementById('auth-screen')?.classList.toggle('hidden', !!currentUser);
+    document.getElementById('app-layout')?.classList.toggle('hidden', !currentUser);
+    document.querySelectorAll('[data-role="admin"]').forEach(el => {
+        el.classList.toggle('hidden', !isAdmin);
+    });
+    setText('current-user-label', currentUser ? `${currentUser.username} - ${roleLabel}` : '--');
+
+    if (!isAdmin && document.getElementById('database-view')?.classList.contains('active')) {
+        switchPage('home');
+    }
+
+    if (window.lucide) lucide.createIcons();
+}
+
+async function login(username, password) {
+    const res = await fetch(`${CONFIG.BACKEND_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Đăng nhập thất bại');
+    setAuthSession(data.token, data.user);
+    applyAuthUI();
+    startApp();
+}
+
+function logout() {
+    clearAuthSession();
+    applyAuthUI();
+    appIntervals.forEach(id => clearInterval(id));
+    appIntervals = [];
+    destroyCharts();
+    appStarted = false;
+}
+
+async function restoreAuthSession() {
+    const token = getAuthToken();
+    if (!token) {
+        applyAuthUI();
+        return;
+    }
+
+    try {
+        const res = await apiFetch('/auth/me', { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Session expired');
+        setAuthSession(token, data.user);
+    } catch (err) {
+        clearAuthSession();
+    }
+
+    applyAuthUI();
+    if (currentUser) startApp();
+}
+
+function initAuthForm() {
+    const form = document.getElementById('login-form');
+    const errorEl = document.getElementById('login-error');
+    form?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (errorEl) errorEl.innerText = '';
+        const button = form.querySelector('button[type="submit"]');
+        const originalText = button?.innerText || '';
+        if (button) {
+            button.disabled = true;
+            button.innerText = 'Đang đăng nhập...';
+        }
+
+        try {
+            const username = document.getElementById('login-username')?.value || '';
+            const password = document.getElementById('login-password')?.value || '';
+            await login(username, password);
+            form.reset();
+        } catch (err) {
+            if (errorEl) errorEl.innerText = err.message || 'Đăng nhập thất bại';
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.innerText = originalText;
+            }
+        }
+    });
 }
 
 function firstDefined(...values) {
@@ -683,6 +847,11 @@ function handleDatabaseTableChange() {
 async function loadDatabaseRows() {
     const body = document.getElementById('database-table-body');
     if (!body) return;
+    if (!hasRole('admin')) {
+        body.innerHTML = '<tr><td colspan="6">Tài khoản user không có quyền truy cập database.</td></tr>';
+        setText('database-summary-count', '0 dÃ²ng');
+        return;
+    }
 
     const table = getDatabaseTable();
     const { start, end } = getDatabaseRange();
@@ -693,7 +862,7 @@ async function loadDatabaseRows() {
     body.innerHTML = '<tr><td colspan="6">Đang tải dữ liệu...</td></tr>';
 
     try {
-        const res = await fetch(`${CONFIG.BACKEND_URL}/database/${table}?${params}`, { cache: 'no-store' });
+        const res = await apiFetch(`/database/${table}?${params}`, { cache: 'no-store' });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Không tải được dữ liệu database.');
 
@@ -722,7 +891,7 @@ async function deleteDatabaseRow(table, id) {
     if (!confirm(message)) return;
 
     try {
-        const res = await fetch(`${CONFIG.BACKEND_URL}/database/${table}/${encodeURIComponent(rowId)}`, { method: 'DELETE' });
+        const res = await apiFetch(`/database/${table}/${encodeURIComponent(rowId)}`, { method: 'DELETE' });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Không xóa được dòng dữ liệu.');
 
@@ -745,7 +914,7 @@ async function deleteSensorDataByTime() {
     if (!confirm('Xóa tất cả dòng sensor_data trong khoảng thời gian đã chọn?')) return;
 
     try {
-        const res = await fetch(`${CONFIG.BACKEND_URL}/database/sensor_data`, {
+        const res = await apiFetch('/database/sensor_data', {
             method: 'DELETE',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ start, end })
@@ -935,7 +1104,9 @@ function initSupabaseRealtime() {
         .subscribe();
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+function startApp() {
+    if (appStarted || !currentUser) return;
+    appStarted = true;
     setText('mqtt-status', 'Đang kiểm tra');
     setText('cloud-status', 'Đang kiểm tra');
     initSupabaseRealtime();
@@ -946,7 +1117,12 @@ window.addEventListener('DOMContentLoaded', () => {
     loadImages();
     loadHistory();
     checkBackendStatus();
-    setInterval(checkBackendStatus, 2000);
-    setInterval(() => loadStatistics(), 15000);
-    setInterval(() => loadImages('poll'), 2000);
+    appIntervals.push(setInterval(checkBackendStatus, 2000));
+    appIntervals.push(setInterval(() => loadStatistics(), 15000));
+    appIntervals.push(setInterval(() => loadImages('poll'), 2000));
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    initAuthForm();
+    restoreAuthSession();
 });
