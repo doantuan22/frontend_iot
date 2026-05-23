@@ -1115,11 +1115,19 @@ function cacheBustedUrl(url, key) {
     return `${url}${separator}v=${encodeURIComponent(key || Date.now())}`;
 }
 
-function setImageAlertState(active, key = '') {
+function setImageAlertState(active, key = '', timeText = '') {
     const streamCard = document.querySelector('.stream-card');
     const button = document.getElementById('ack-image-alert-btn');
+    const banner = document.getElementById('image-alert-banner');
     streamCard?.classList.toggle('new-image-alert', active);
     button?.classList.toggle('hidden', !active);
+    banner?.classList.toggle('hidden', !active);
+    if (active) {
+        const currentTimeText = document.getElementById('image-alert-time')?.innerText;
+        setText('image-alert-title', 'Cảnh báo ảnh AI mới');
+        setText('image-alert-message', 'AI vừa phát hiện sự kiện bất thường. Vui lòng kiểm tra ảnh mới và bấm xác nhận để tắt cảnh báo.');
+        setText('image-alert-time', timeText || currentTimeText || '--');
+    }
     pendingImageAlertKey = active ? key : '';
 }
 
@@ -1132,8 +1140,8 @@ function acknowledgeImageAlert() {
 
 function notifyNewImage(item) {
     const key = getImageKey(item);
-    setImageAlertState(true, key);
     const time = formatDatabaseTime(getImageTimestamp(item) || Date.now());
+    setImageAlertState(true, key, time);
     showToast(`AI đã phát hiện sự kiện và cập nhật ảnh mới lúc ${time}.`, 'danger');
 }
 

@@ -6,7 +6,7 @@
     <title>Giám sát IoT | Hệ thống giám sát thông minh</title>
     <meta name="description" content="Hệ thống giám sát IoT thời gian thực với cảnh báo cảm biến và hình ảnh giám sát.">
 
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=20260523-image-alert">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -228,6 +228,14 @@
                                     <i data-lucide="camera"></i>
                                     <span>Đang cập nhật hình ảnh từ Supabase</span>
                                 </div>
+                                <div class="image-alert-banner hidden" id="image-alert-banner" role="alert">
+                                    <div class="image-alert-icon"><i data-lucide="triangle-alert"></i></div>
+                                    <div>
+                                        <strong id="image-alert-title">Cảnh báo ảnh AI mới</strong>
+                                        <span id="image-alert-message">AI vừa phát hiện sự kiện bất thường. Vui lòng kiểm tra ảnh và bấm xác nhận.</span>
+                                    </div>
+                                    <span id="image-alert-time">--</span>
+                                </div>
                                 <button class="ack-image-btn hidden" id="ack-image-alert-btn" type="button" onclick="acknowledgeImageAlert()">
                                     <i data-lucide="check-circle-2"></i>
                                     Xác nhận đã xem ảnh cảnh báo
@@ -431,7 +439,7 @@
         </main>
     </div>
 
-    <script src="main.js?v=20260523-stale-image-gif"></script>
+    <script src="main.js?v=20260523-image-alert"></script>
     <script>
         lucide.createIcons();
     </script>
