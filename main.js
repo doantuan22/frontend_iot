@@ -1240,11 +1240,17 @@ function isImageStale(item = {}) {
     return Number.isFinite(imageTime) && Date.now() - imageTime > STALE_IMAGE_MAX_AGE_MS;
 }
 
+function updateImageElementSource(element, url) {
+    if (!element || !url) return;
+    if (element.getAttribute('src') === url) return;
+    element.src = url;
+}
+
 function setStreamImageSource(mainUrl, overlayUrl = mainUrl) {
     const img = document.getElementById('latest-img');
     const overlay = document.getElementById('overlay-img');
-    if (img && mainUrl) img.src = mainUrl;
-    if (overlay && overlayUrl) overlay.src = overlayUrl;
+    updateImageElementSource(img, mainUrl);
+    updateImageElementSource(overlay, overlayUrl);
 }
 
 function getMainImageDisplayUrl(item = {}) {
