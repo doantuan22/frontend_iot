@@ -25,6 +25,27 @@ const STALE_IMAGE_MAX_AGE_MS = 5 * 60 * 1000;
 const STALE_IMAGE_GIF_URL = 'GIF/mohamed_hassan-satellite-11050.gif';
 const INACTIVE_ALERT_VALUES = new Set(['0', 'false', 'no', 'none', 'ok', 'safe', 'normal', 'off']);
 const ACTIVE_ALERT_VALUES = new Set(['1', 'true', 'yes', 'danger', 'alert', 'warning', 'fire', 'gas', 'temp', 'temperature', 'humidity']);
+const AI_DATABASE_TABLES = {
+    stroke_events: {
+        label: 'Stroke_event',
+        idColumn: 'id',
+        timeKeys: ['timestamp', 'created_at'],
+        imageSource: true
+    },
+    airport_events: {
+        label: 'airport_events',
+        idColumn: 'id',
+        timeKeys: ['created_at'],
+        imageSource: true
+    },
+    baggage_tracks: {
+        label: 'baggage_tracks',
+        idColumn: 'track_id',
+        timeKeys: ['updated_at', 'last_seen_at', 'owner_gone_at', 'first_seen_at'],
+        imageSource: false
+    }
+};
+const AI_REALTIME_TABLES = Object.keys(AI_DATABASE_TABLES);
 
 let dbClient = null;
 let charts = { main: null, gas: null };
@@ -542,7 +563,7 @@ function initStatisticsControls() {
     if (typeSelect) {
         const typeOptions = [
             { value: 'sensor', label: 'Thống kê cảm biến' },
-            { value: 'stroke_event', label: 'Thống kê cảnh báo đột quỵ' }
+            { value: 'stroke_event', label: 'Thống kê cảnh báo từ AI' }
         ];
         Array.from(typeSelect.options).forEach((option, index) => {
             option.value = typeOptions[index]?.value || option.value;
@@ -574,7 +595,7 @@ function rangeLabel(range) {
 }
 
 function setStatisticsMode(type) {
-    const isStroke = type === 'stroke_event';
+    const isStroke = type === 'stroke_event' || type === 'ai_alerts';
     document.getElementById('sensor-stats-summary')?.classList.toggle('hidden', isStroke);
     document.getElementById('sensor-stats-charts')?.classList.toggle('hidden', isStroke);
     document.getElementById('stroke-stats-panel')?.classList.toggle('hidden', !isStroke);
@@ -615,30 +636,31 @@ function renderSensorStatistics(data) {
 
 function renderStrokeStatistics(data) {
     const summary = data.summary || {};
-    const days = Array.isArray(data.days) ? data.days : [];
-    const maxCount = Math.max(1, ...days.map(day => Number(day.count) || 0));
+    const tables = Array.isArray(data.tables) ? data.tables : [];
+    const maxCount = Math.max(1, ...tables.map(item => Number(item.count) || 0));
 
     setStatisticsMode('stroke_event');
     setText('stroke-total-val', summary.total || 0);
-    setText('stroke-total-desc', `Theo số ảnh AI gửi về trong ${rangeLabel(data.range)}`);
-    setText('stroke-max-val', summary.maxDay?.label || '--');
-    setText('stroke-max-desc', `${summary.maxDay?.count || 0} sự kiện`);
+    setText('stroke-total-desc', `Theo số ảnh/sự kiện AI trong ${rangeLabel(data.range)}`);
+    setText('stroke-max-val', summary.maxTable?.label || '--');
+    setText('stroke-max-desc', `${summary.maxTable?.count || 0} cảnh báo`);
     setText('stroke-average-val', formatStatNumber(summary.averagePerDay || 0, 1));
+    setText('stroke-average-desc', 'Cảnh báo/ngày');
 
     const list = document.getElementById('stroke-frequency-list');
     if (!list) return;
 
-    list.innerHTML = days.length ? days.map(day => {
-        const count = Number(day.count) || 0;
-        const width = Math.max(4, Math.round((count / maxCount) * 100));
+    list.innerHTML = tables.length ? tables.map(item => {
+        const count = Number(item.count) || 0;
+        const width = count > 0 ? Math.max(4, Math.round((count / maxCount) * 100)) : 0;
         return `<div class="stroke-frequency-item">
             <div class="stroke-frequency-meta">
-                <span>${escapeHtml(day.label)}</span>
-                <strong>${count} ảnh</strong>
+                <span>${escapeHtml(item.label || item.table || item.key)}</span>
+                <strong>${count} cảnh báo</strong>
             </div>
             <div class="stroke-frequency-bar"><span style="width: ${width}%"></span></div>
         </div>`;
-    }).join('') : '<div class="empty-state">Không có dữ liệu đột quỵ trong khoảng thời gian này.</div>';
+    }).join('') : '<div class="empty-state">Không có dữ liệu AI trong khoảng thời gian này.</div>';
 }
 
 async function loadStatistics(force = false) {
@@ -787,6 +809,69 @@ function databaseColumnValue(row, keys) {
     return '';
 }
 
+function databaseTableMeta(table) {
+    return AI_DATABASE_TABLES[table] || null;
+}
+
+function isAiDatabaseTable(table) {
+    return !!databaseTableMeta(table);
+}
+
+function databaseTableLabel(table) {
+    return databaseTableMeta(table)?.label || table;
+}
+
+function databaseRowId(row = {}, table = '') {
+    const idColumn = databaseTableMeta(table)?.idColumn || 'id';
+    return databaseColumnValue(row, [idColumn, 'id', 'track_id', 'trackId']);
+}
+
+function databaseRowTime(row = {}, table = '') {
+    const timeKeys = databaseTableMeta(table)?.timeKeys || ['timestamp', 'created_at'];
+    return databaseColumnValue(row, timeKeys);
+}
+
+function formatBooleanText(value) {
+    if (value === true || String(value).toLowerCase() === 'true') return 'Có';
+    if (value === false || String(value).toLowerCase() === 'false') return 'Không';
+    return '';
+}
+
+function formatConfidence(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '';
+    return `${Math.round(number * 100)}%`;
+}
+
+function databaseRowDetail(row = {}, table = '') {
+    if (table === 'airport_events') {
+        return [
+            databaseColumnValue(row, ['event_type']) ? `Sự kiện: ${databaseColumnValue(row, ['event_type'])}` : '',
+            databaseColumnValue(row, ['object_class']) ? `Đối tượng: ${databaseColumnValue(row, ['object_class'])}` : '',
+            formatConfidence(databaseColumnValue(row, ['confidence'])) ? `Tin cậy: ${formatConfidence(databaseColumnValue(row, ['confidence']))}` : '',
+            databaseColumnValue(row, ['risk_level']) ? `Mức rủi ro: ${databaseColumnValue(row, ['risk_level'])}` : '',
+            databaseColumnValue(row, ['zone_name']) ? `Khu vực: ${databaseColumnValue(row, ['zone_name'])}` : '',
+            databaseColumnValue(row, ['duration_sec']) ? `Thời lượng: ${databaseColumnValue(row, ['duration_sec'])}s` : '',
+            formatBooleanText(row.resolved) ? `Đã xử lý: ${formatBooleanText(row.resolved)}` : '',
+            databaseColumnValue(row, ['camera_id']) ? `Camera: ${databaseColumnValue(row, ['camera_id'])}` : ''
+        ].filter(Boolean).join(' | ');
+    }
+
+    if (table === 'baggage_tracks') {
+        return [
+            databaseColumnValue(row, ['object_class']) ? `Đối tượng: ${databaseColumnValue(row, ['object_class'])}` : '',
+            databaseColumnValue(row, ['camera_id']) ? `Camera: ${databaseColumnValue(row, ['camera_id'])}` : '',
+            databaseColumnValue(row, ['track_id']) ? `Track: ${databaseColumnValue(row, ['track_id'])}` : '',
+            formatBooleanText(row.has_owner) ? `Có chủ: ${formatBooleanText(row.has_owner)}` : '',
+            row.owner_gone_at ? `Chủ rời lúc: ${formatDatabaseTime(row.owner_gone_at)}` : '',
+            formatBooleanText(row.alerted) ? `Đã gửi cảnh báo: ${formatBooleanText(row.alerted)}` : '',
+            row.bbox ? `BBox: ${typeof row.bbox === 'string' ? row.bbox : JSON.stringify(row.bbox)}` : ''
+        ].filter(Boolean).join(' | ');
+    }
+
+    return databaseColumnValue(row, ['event_type', 'label', 'description', 'warning', 'status']) || `Sự kiện #${databaseRowId(row, table) || '--'}`;
+}
+
 function inlineJsString(value) {
     const text = String(value ?? '')
         .replace(/\\/g, '\\\\')
@@ -823,27 +908,32 @@ function renderDatabaseTable(table, rows) {
 
     head.innerHTML = '<tr><th>ID</th><th>Thời gian</th><th>Chi tiết</th><th>Hình ảnh</th><th>Thao tác</th></tr>';
     body.innerHTML = rows.length ? rows.map(row => {
-        const time = databaseColumnValue(row, ['timestamp', 'created_at']);
+        const rowId = databaseRowId(row, table);
+        const time = databaseRowTime(row, table);
         const imageUrl = getImageUrl(row);
-        const detail = databaseColumnValue(row, ['event_type', 'label', 'description', 'warning', 'status']) || `Sự kiện #${row.id}`;
+        const detail = databaseRowDetail(row, table);
 
         return `<tr>
-            <td>${escapeHtml(row.id)}</td>
+            <td>${escapeHtml(rowId || '--')}</td>
             <td>${escapeHtml(formatDatabaseTime(time))}</td>
             <td>${escapeHtml(detail)}</td>
             <td>${imageUrl ? `<button class="btn-view-img" type="button" data-image-url="${escapeHtml(imageUrl)}" aria-label="Xem ảnh"><i data-lucide="image"></i></button>` : '--'}</td>
-            <td><button class="database-icon-btn danger" type="button" onclick="deleteDatabaseRow('${table}', ${inlineJsString(row.id)})" aria-label="Xóa"><i data-lucide="trash-2"></i></button></td>
+            <td><button class="database-icon-btn danger" type="button" onclick="deleteDatabaseRow('${table}', ${inlineJsString(rowId)})" aria-label="Xóa"><i data-lucide="trash-2"></i></button></td>
         </tr>`;
     }).join('') : '<tr><td colspan="5">Không có dữ liệu phù hợp.</td></tr>';
 }
 
 function handleDatabaseTableChange() {
     const table = getDatabaseTable();
+    const meta = databaseTableMeta(table);
     document.getElementById('database-bulk-delete')?.classList.toggle('hidden', table !== 'sensor_data');
-    setText('database-summary-title', table === 'sensor_data' ? 'sensor_data' : 'Stroke_event');
-    setText('database-summary-note', table === 'sensor_data'
+    setText('database-summary-title', table === 'sensor_data' ? 'sensor_data' : databaseTableLabel(table));
+    const note = table === 'sensor_data'
         ? 'Có thể xóa hàng loạt sensor_data theo khoảng thời gian đã chọn.'
-        : 'Xóa Stroke_event sẽ cố gắng xóa ảnh trong Storage bucket surveillance-images trước.');
+        : meta?.imageSource
+            ? `Xóa ${databaseTableLabel(table)} sẽ cố gắng xóa ảnh trong Storage bucket surveillance-images trước nếu có.`
+            : 'Bảng trạng thái realtime của hành lý; xóa dòng sẽ xóa trạng thái theo track_id.';
+    setText('database-summary-note', note);
     loadDatabaseRows();
 }
 
@@ -888,8 +978,11 @@ async function deleteDatabaseRow(table, id) {
         return;
     }
 
-    const message = table === 'stroke_events'
-        ? 'Xóa dòng này và ảnh liên quan trong Storage nếu tìm thấy?'
+    const meta = databaseTableMeta(table);
+    const message = meta?.imageSource
+        ? `Xóa dòng ${databaseTableLabel(table)} này và ảnh liên quan trong Storage nếu tìm thấy?`
+        : isAiDatabaseTable(table)
+            ? `Xóa dòng ${databaseTableLabel(table)} này?`
         : 'Xóa dòng dữ liệu này?';
     if (!confirm(message)) return;
 
@@ -901,7 +994,7 @@ async function deleteDatabaseRow(table, id) {
         const storageText = data.storage?.deleted ? ` Đã xóa ảnh: ${data.storage.path}` : '';
         showToast(`Đã xóa ${data.deleted || 0} dòng.${storageText}`, 'success');
         loadDatabaseRows();
-        if (table === 'stroke_events') loadImages('database-delete');
+        if (isAiDatabaseTable(table)) loadImages('database-delete');
     } catch (err) {
         showToast(err.message, 'error');
     }
@@ -972,10 +1065,12 @@ function renderHistoryTable(type, rows) {
         body.innerHTML = rows.length ? rows.map(item => {
             const url = getImageUrl(item);
             const time = formatDatabaseTime(getImageTimestamp(item));
-            const detail = databaseColumnValue(item, ['event_type', 'label', 'description', 'status']) || `Sự kiện #${item.id}`;
+            const sourceTable = item.source_table || item.ai_table || '';
+            const detail = databaseRowDetail(item, sourceTable) || `Sự kiện #${databaseRowId(item, sourceTable) || '--'}`;
+            const sourceLabel = item.source_label || databaseTableLabel(sourceTable) || 'AI';
             return `<tr>
                 <td>${escapeHtml(time)}</td>
-                <td>Ảnh AI chụp</td>
+                <td>Ảnh AI chụp${sourceLabel ? ` - ${escapeHtml(sourceLabel)}` : ''}</td>
                 <td>${escapeHtml(detail)}</td>
                 <td>${url ? `<button class="btn-view-img" type="button" data-image-url="${escapeHtml(url)}" aria-label="Xem ảnh"><i data-lucide="image"></i></button>` : '--'}</td>
             </tr>`;
@@ -1043,16 +1138,77 @@ function escapeHtml(value) {
     }[char]));
 }
 
+function objectFromJson(value) {
+    if (!value) return null;
+    if (typeof value === 'object') return value;
+    if (typeof value !== 'string') return null;
+
+    try {
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch (err) {
+        return null;
+    }
+}
+
 function getImageUrl(item = {}) {
-    return item.image_url || item.url || item.path || '';
+    const metadata = objectFromJson(item.metadata);
+    const bbox = objectFromJson(item.bbox);
+    return firstDefined(
+        item.image_url,
+        item.imageUrl,
+        item.imageURL,
+        item.snapshot_url,
+        item.snapshotUrl,
+        item.frame_url,
+        item.frameUrl,
+        item.photo_url,
+        item.photoUrl,
+        item.thumbnail_url,
+        item.thumbnailUrl,
+        item.url,
+        item.image,
+        item.path,
+        item.file_path,
+        item.filePath,
+        metadata?.image_url,
+        metadata?.imageUrl,
+        metadata?.snapshot_url,
+        metadata?.snapshotUrl,
+        metadata?.frame_url,
+        metadata?.frameUrl,
+        metadata?.url,
+        metadata?.path,
+        bbox?.image_url,
+        bbox?.imageUrl,
+        bbox?.url,
+        bbox?.path,
+        ''
+    );
 }
 
 function getImageKey(item = {}) {
-    return String(firstDefined(item.id, item.created_at, item.timestamp, getImageUrl(item), ''));
+    return [
+        item.source_table || item.ai_table || '',
+        firstDefined(item.id, item.track_id, item.trackId, item.created_at, item.timestamp, getImageUrl(item), '')
+    ].join(':');
 }
 
 function getImageTimestamp(item = {}) {
-    return firstDefined(item.timestamp, item.created_at, item.createdAt);
+    return firstDefined(
+        item.ai_timestamp,
+        item.timestamp,
+        item.created_at,
+        item.createdAt,
+        item.updated_at,
+        item.updatedAt,
+        item.last_seen_at,
+        item.lastSeenAt,
+        item.owner_gone_at,
+        item.ownerGoneAt,
+        item.first_seen_at,
+        item.firstSeenAt
+    );
 }
 
 function parseVietnamTimestamp(value) {
@@ -1178,11 +1334,13 @@ async function loadImages(source = 'poll') {
 function initSupabaseRealtime() {
     if (typeof supabase === 'undefined') return;
     dbClient = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
-    dbClient
-        .channel('stroke-events-realtime')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'stroke_events' }, () => loadImages('realtime'))
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'stroke_events' }, () => loadImages('realtime'))
-        .subscribe();
+    const channel = dbClient.channel('ai-events-realtime');
+    AI_REALTIME_TABLES.forEach(table => {
+        channel
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table }, () => loadImages('realtime'))
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table }, () => loadImages('realtime'));
+    });
+    channel.subscribe();
 }
 
 function startApp() {

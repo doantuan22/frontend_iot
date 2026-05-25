@@ -6,7 +6,7 @@
     <title>Giám sát IoT | Hệ thống giám sát thông minh</title>
     <meta name="description" content="Hệ thống giám sát IoT thời gian thực với cảnh báo cảm biến và hình ảnh giám sát.">
 
-    <link rel="stylesheet" href="style.css?v=20260523-image-alert">
+    <link rel="stylesheet" href="style.css?v=20260525-ai-tables">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -254,7 +254,7 @@
                         </select>
                         <select id="data-type" aria-label="Bộ lọc dữ liệu">
                             <option value="sensor">Thống kê cảm biến</option>
-                            <option value="stroke_event">Thống kê cảnh báo đột quỵ</option>
+                            <option value="stroke_event">Thống kê cảnh báo từ AI</option>
                         </select>
                     </div>
 
@@ -298,7 +298,7 @@
                             <div class="stat-card">
                                 <div class="stat-icon fire"><i data-lucide="camera"></i></div>
                                 <div class="stat-info">
-                                    <span class="stat-label">Tổng cảnh báo đột quỵ</span>
+                                    <span class="stat-label">Tổng cảnh báo từ AI</span>
                                     <div class="stat-value" id="stroke-total-val">0</div>
                                     <span class="stat-desc" id="stroke-total-desc">Theo số ảnh AI gửi về</span>
                                 </div>
@@ -306,7 +306,7 @@
                             <div class="stat-card">
                                 <div class="stat-icon gas"><i data-lucide="calendar-days"></i></div>
                                 <div class="stat-info">
-                                    <span class="stat-label">Ngày cao nhất</span>
+                                    <span class="stat-label">Bảng nhiều nhất</span>
                                     <div class="stat-value" id="stroke-max-val">--</div>
                                     <span class="stat-desc" id="stroke-max-desc">0 sự kiện</span>
                                 </div>
@@ -316,7 +316,7 @@
                                 <div class="stat-info">
                                     <span class="stat-label">Trung bình mỗi ngày</span>
                                     <div class="stat-value" id="stroke-average-val">0</div>
-                                    <span class="stat-desc" id="stroke-average-desc">Sự kiện/ngày</span>
+                                    <span class="stat-desc" id="stroke-average-desc">Cảnh báo/ngày</span>
                                 </div>
                             </div>
                         </div>
@@ -346,6 +346,8 @@
                             <label for="database-table">Bảng dữ liệu</label>
                             <select id="database-table" onchange="handleDatabaseTableChange()">
                                 <option value="stroke_events">Stroke_event</option>
+                                <option value="airport_events">airport_events</option>
+                                <option value="baggage_tracks">baggage_tracks</option>
                                 <option value="sensor_data">sensor_data</option>
                             </select>
                         </div>
@@ -439,7 +441,7 @@
         </main>
     </div>
 
-    <script src="main.js?v=20260523-image-alert"></script>
+    <script src="main.js?v=20260525-ai-tables"></script>
     <script>
         lucide.createIcons();
     </script>
