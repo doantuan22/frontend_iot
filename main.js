@@ -22,7 +22,7 @@ const CONFIG = {
 };
 
 const STALE_IMAGE_MAX_AGE_MS = 5 * 60 * 1000;
-const STALE_IMAGE_GIF_URL = 'GIF/mohamed_hassan-satellite-11050.gif';
+const STALE_IMAGE_GIF_URL = 'GIF/nen01.gif';
 const INACTIVE_ALERT_VALUES = new Set(['0', 'false', 'no', 'none', 'ok', 'safe', 'normal', 'off']);
 const ACTIVE_ALERT_VALUES = new Set(['1', 'true', 'yes', 'danger', 'alert', 'warning', 'fire', 'gas', 'temp', 'temperature', 'humidity']);
 const AI_DATABASE_TABLES = {
