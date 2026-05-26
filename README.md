@@ -1,4 +1,4 @@
-<img width="1909" height="907" alt="image" src="https://github.com/user-attachments/assets/df3bf2aa-f6ba-4de1-aa1e-c399571a0293" /># BÁO CÁO ĐỒ ÁN IOT
+# BÁO CÁO ĐỒ ÁN IOT
 ## HỆ THỐNG GIÁM SÁT AN TOÀN SÂN BAY BẰNG CAMERA AI VÀ CẢM BIẾN
 
 ---
