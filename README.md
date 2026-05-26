@@ -1970,832 +1970,191 @@ async function calculateAiStatistics(range) {
 
 ---
 
-# CHƯƠNG 4: XÂY DỰNG VÀ THIẾT LẬP MÔ PHỎNG
-
-## 4.1 Môi trường phát triển
-
-### 4.1.1 Phần IoT (ESP32)
-
-**IDE và Tools:**
-- **Visual Studio Code** 1.85+
-- **PlatformIO Extension** 6.1+
-- **Wokwi Simulator Extension** 4.0+
-
-**Platform và Framework:**
-- **Platform**: espressif32
-- **Board**: esp32dev (ESP32 DevKit C V4)
-- **Framework**: Arduino
-
-**Thư viện sử dụng:**
-```ini
-lib_deps = 
-    knolleary/PubSubClient@^2.8
-    marcoschwartz/LiquidCrystal_I2C@^1.1.4
-    adafruit/DHT sensor library@^1.4.4
-    adafruit/Adafruit Unified Sensor@^1.1.14
-    bblanchon/ArduinoJson@^7.0.4
-```
-
-**Cấu hình PlatformIO:**
-```ini
-[env:esp32dev]
-platform = espressif32
-board = esp32dev
-framework = arduino
-monitor_speed = 115200
-```
-
-### 4.1.2 Phần AI (Python)
-
-**Python Version:** 3.10+
-
-**IDE:** Visual Studio Code hoặc PyCharm
-
-**Thư viện chính:**
-```
-torch>=2.0.0              # PyTorch
-ultralytics>=8.1.0        # YOLOv8
-opencv-python>=4.8.0      # Computer Vision
-numpy>=1.24.0             # Numerical Computing
-supabase>=2.4.0           # Cloud Backend
-customtkinter>=5.2.0      # Modern GUI
-```
-
-**GPU Support:**
-- CUDA 11.8+ (nếu có NVIDIA GPU)
-- cuDNN 8.6+
-- TensorRT 8.5+ (optional, cho tối ưu)
-
-### 4.1.3 Phần Backend (Node.js)
-
-**Node.js Version:** 18.x LTS
-
-**Package Manager:** npm 9.x
-
-**Dependencies:**
-```json
-{
-  "express": "^5.2.1",
-  "mqtt": "^5.15.1",
-  "@supabase/supabase-js": "^2.105.4",
-  "cors": "^2.8.6",
-  "dotenv": "^17.4.2"
-}
-```
-
-**Development Tools:**
-- **Nodemon**: Auto-restart server
-- **Postman**: API testing
-
-### 4.1.4 Phần Frontend
-
-**Browser Support:**
-- Chrome 90+
-- Firefox 88+
-- Safari 14+
-- Edge 90+
-
-**Libraries:**
-- **Chart.js** 4.x: Biểu đồ
-- **Lucide Icons**: Icon library
-- **Supabase JS Client** 2.x: Realtime
-
-**Development Server:**
-- Live Server extension (VS Code)
-- hoặc `python -m http.server 8000`
-
-### 4.1.5 Cloud Services
-
-**HiveMQ Cloud:**
-- Plan: Free (100 connections)
-- Region: EU (Europe)
-- TLS: Enabled
-
-**Supabase:**
-- Plan: Free (500 MB database, 1 GB storage)
-- Region: Southeast Asia
-- Postgres Version: 15
-
-**Render.com:**
-- Plan: Free (750 hours/month)
-- Region: Singapore
-- Auto-deploy từ GitHub
-
-
-## 4.2 Xây dựng mô hình Firmware (Wokwi)
-
-### 4.2.1 Cấu trúc code
-
-**File chính: src/main.cpp**
-
-**Sections:**
-1. **Includes và Defines** (dòng 1-30)
-   - Thư viện: Arduino.h, WiFi.h, PubSubClient.h, DHT.h, ArduinoJson.h
-   - Định nghĩa pins và constants
-
-2. **Global Variables** (dòng 31-60)
-   - MQTT client, DHT sensor, LCD
-   - Sensor data: temp, humidity, gas, fire
-   - Alert management: activeAlerts[], alertCount
-   - Timing: lastUpdateTime, lastBlinkTime
-
-3. **WiFi & MQTT Setup** (dòng 61-140)
-   - `setup_wifi()`: Kết nối WiFi Wokwi-GUEST
-   - `callback()`: Xử lý MQTT commands
-   - `reconnect()`: Tự động kết nối lại MQTT
-
-4. **Main Logic** (dòng 141-220)
-   - `setup()`: Khởi tạo LCD, DHT, WiFi, MQTT
-   - `loop()`: Vòng lặp chính
-     - Đọc cảm biến mỗi 2 giây
-     - Gửi dữ liệu qua MQTT
-     - Quản lý hiển thị LCD
-
-5. **Helper Functions** (dòng 221-260)
-   - `buildAlertList()`: Tạo danh sách alerts
-   - `displayNormal()`: Hiển thị bình thường
-   - `displayAlert()`: Hiển thị cảnh báo
-   - `sendData()`: Gửi JSON qua MQTT
-
-### 4.2.2 Cấu hình Wokwi
-
-**File: diagram.json**
-
-**Components:**
-```json
-{
-  "parts": [
-    { "type": "board-esp32-devkit-c-v4", "id": "esp" },
-    { "type": "wokwi-lcd1602", "id": "lcd1", "attrs": { "pins": "i2c", "address": "0x27" } },
-    { "type": "wokwi-potentiometer", "id": "pot1", "attrs": { "label": "Gas Sensor (MQ-2 Sim)" } },
-    { "type": "wokwi-flame-sensor", "id": "flame1" },
-    { "type": "wokwi-dht22", "id": "dht1" },
-    { "type": "wokwi-pushbutton", "id": "btn1", "attrs": { "color": "red", "label": "LỬA" } }
-  ]
-}
-```
-
-**Connections:**
-- LCD I2C: SDA (GPIO 21), SCL (GPIO 22)
-- DHT22: Data (GPIO 15)
-- Potentiometer: Signal (GPIO 34)
-- Flame Sensor: Digital Out (GPIO 25)
-- Fire Button: GPIO 26
-
-### 4.2.3 Build và Deploy
-
-**Build firmware:**
-```bash
-cd IOT
-pio run
-```
-
-Output: `.pio/build/esp32dev/firmware.bin`
-
-**Run simulation:**
-1. Mở VS Code
-2. Mở file `diagram.json`
-3. Click nút ▶️ "Start Simulation"
-4. Hoặc: F1 → "Wokwi: Start Simulator"
-
-**Monitor Serial:**
-```bash
-pio device monitor
-```
-
-Hoặc xem trong Wokwi Serial Monitor.
-
-## 4.3 Xây dựng mô hình AI
-
-### 4.3.1 Cấu trúc project
-
-```
-Stroke_al/
-├── app/
-│   ├── ai/
-│   │   ├── detector.py           # YOLOv8-Pose wrapper
-│   │   ├── object_detector.py    # YOLOv8 Object Detection
-│   │   ├── tracker.py            # Keypoint history tracker
-│   │   ├── recognizer_v2.py      # Stroke detection logic
-│   │   ├── baggage_tracker.py    # Abandoned baggage
-│   │   └── weapon_detector.py    # Weapon detection
-│   ├── cloud/
-│   │   ├── supabase.py           # Stroke events client
-│   │   └── airport_cloud.py      # Airport events client
-│   ├── gui/
-│   │   └── main_window.py        # CustomTkinter GUI
-│   └── utils/
-│       ├── visualization.py      # Stroke visualization
-│       └── airport_viz.py        # Airport visualization
-├── main.py                       # Entry point
-├── requirements.txt
-├── .env                          # Supabase credentials
-├── yolov8n-pose.pt              # Pose model
-└── yolov8n.pt                   # Object detection model
-```
-
-### 4.3.2 Cài đặt dependencies
-
-```bash
-cd Al_Python/Stroke_al
-pip install -r requirements.txt
-```
-
-**Cấu hình .env:**
-```env
-SUPABASE_URL=https://ypddfcoesrtvjabyqqta.supabase.co
-SUPABASE_KEY=your_supabase_key
-SUPABASE_BUCKET=surveillance-images
-```
-
-### 4.3.3 Chạy ứng dụng
-
-```bash
-python main.py
-```
-
-**GUI Controls:**
-- **Source**: Chọn Webcam hoặc Video file
-- **Frame Skip**: Điều chỉnh tốc độ (1-5)
-- **Start/Stop**: Bắt đầu/dừng detection
-- **Tabs**: Live Detection, Database Manager, Airport Database
-
-### 4.3.4 Tối ưu hiệu năng
-
-**GPU Acceleration:**
-```python
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-model.to(device)
-```
-
-**FP16 Half Precision:**
-```python
-results = model.predict(frame, half=True)  # Chỉ trên GPU
-```
-
-**Frame Skip:**
-```python
-if frame_counter % object_skip != 0:
-    return cached_results  # Dùng cache
-```
-
-**TensorRT Export:**
-```bash
-yolo export model=yolov8n-pose.pt format=engine device=0
-```
-
-## 4.4 Xây dựng giao diện Web (Frontend)
-
-### 4.4.1 Cấu trúc files
-
-```
-frontend/
-├── index.html          # Main HTML
-├── style.css           # Styles
-├── main.js             # JavaScript logic
-├── logo/
-│   └── Web IoT.png     # Logo
-└── GIF/
-    └── nen01.gif       # Placeholder image
-```
-
-### 4.4.2 HTML Structure
-
-**Sections:**
-1. **Auth Screen** (Login form)
-2. **App Layout**
-   - Sidebar (Navigation)
-   - Main Content
-     - Top Header
-     - View Container
-       - Home View
-       - Stats View
-       - Database View
-       - History View
-
-### 4.4.3 CSS Architecture
-
-**CSS Variables:**
-```css
-:root {
-    --primary: #3b82f6;
-    --danger: #ef4444;
-    --success: #10b981;
-    --warning: #f59e0b;
-    --bg-primary: #0f172a;
-    --bg-secondary: #1e293b;
-    --text-primary: #f1f5f9;
-}
-```
-
-**Layout:**
-- Flexbox cho sidebar + main
-- Grid cho sensor cards
-- Responsive breakpoints: 768px, 1024px
-
-### 4.4.4 JavaScript Modules
-
-**Main Functions:**
-- `switchPage()`: Chuyển trang
-- `login()`, `logout()`: Authentication
-- `checkBackendStatus()`: Polling backend mỗi 2s
-- `updateSensorCards()`: Cập nhật sensor data
-- `updateChartsData()`: Cập nhật biểu đồ
-- `loadStatistics()`: Tải thống kê
-- `loadDatabaseRows()`: Tải database
-- `loadHistory()`: Tải lịch sử
-
-**Realtime Updates:**
+# CHƯƠNG 4: MÔ PHỎNG VÀ ĐÁNH GIÁ HỆ THỐNG
+
+## 4.1 Thiết lập môi trường mô phỏng
+
+### 4.1.1 Tổng quan môi trường mô phỏng
+
+Hệ thống giám sát an toàn thông minh được triển khai trong môi trường mô phỏng hoàn chỉnh, bao gồm ba thành phần chính: mô phỏng phần cứng IoT trên nền tảng Wokwi, hệ thống AI xử lý hình ảnh thời gian thực, và hệ thống backend-frontend triển khai trên cloud. Môi trường mô phỏng được thiết kế để tái hiện đầy đủ các tình huống thực tế mà không cần phần cứng vật lý, cho phép kiểm thử và đánh giá hệ thống một cách toàn diện.
+
+Việc sử dụng môi trường mô phỏng mang lại nhiều lợi ích: giảm chi phí đầu tư phần cứng, dễ dàng thay đổi cấu hình và thông số, khả năng tái tạo các tình huống nguy hiểm mà không gây rủi ro thực tế, và khả năng kiểm thử song song nhiều kịch bản khác nhau. Đặc biệt, môi trường mô phỏng cho phép tích hợp liền mạch với các dịch vụ cloud thực tế, đảm bảo tính khả thi khi triển khai hệ thống vào thực tế.
+
+### 4.1.2 Môi trường phát triển IoT
+
+**Nền tảng mô phỏng Wokwi:**
+
+Wokwi là nền tảng mô phỏng phần cứng trực tuyến cho phép mô phỏng vi điều khiển ESP32 và các linh kiện điện tử mà không cần phần cứng thật. Nền tảng này cung cấp môi trường mô phỏng chính xác về mặt thời gian (cycle-accurate simulation), hỗ trợ đầy đủ các tính năng của ESP32 bao gồm WiFi, GPIO, ADC, I2C, và các giao thức truyền thông. Wokwi tích hợp với Visual Studio Code thông qua extension, cho phép lập trình, biên dịch và chạy mô phỏng trực tiếp trong IDE.
+
+**Công cụ phát triển:**
+
+Môi trường phát triển sử dụng Visual Studio Code kết hợp với PlatformIO - một nền tảng phát triển nhúng đa nền tảng. PlatformIO cung cấp hệ thống quản lý thư viện tự động, công cụ biên dịch tối ưu, và khả năng debug mạnh mẽ. Framework Arduino được chọn làm nền tảng lập trình nhờ tính đơn giản, cộng đồng lớn, và thư viện phong phú.
+
+**Thư viện và dependencies:**
+
+Hệ thống sử dụng các thư viện chuẩn công nghiệp: PubSubClient cho giao thức MQTT, DHT sensor library cho cảm biến nhiệt độ độ ẩm, LiquidCrystal_I2C cho màn hình LCD, và ArduinoJson cho xử lý dữ liệu JSON. Các thư viện này được quản lý tự động bởi PlatformIO, đảm bảo tính tương thích và dễ dàng cập nhật.
+
+### 4.1.3 Môi trường phát triển AI
+
+**Nền tảng Python và Deep Learning:**
+
+Hệ thống AI được phát triển trên Python 3.10+, ngôn ngữ lập trình phổ biến nhất trong lĩnh vực Machine Learning và Computer Vision. PyTorch được chọn làm framework deep learning chính nhờ tính linh hoạt, khả năng debug tốt, và hỗ trợ mạnh mẽ cho nghiên cứu. Ultralytics YOLOv8 cung cấp API cấp cao để triển khai các mô hình object detection và pose estimation với hiệu năng cao.
+
+**Xử lý hình ảnh và visualization:**
+
+OpenCV (Open Source Computer Vision Library) đảm nhận vai trò xử lý hình ảnh cơ bản như đọc video, resize, color conversion, và vẽ annotations. NumPy cung cấp các phép toán mảng hiệu năng cao cho xử lý dữ liệu keypoints và bounding boxes. CustomTkinter được sử dụng để xây dựng giao diện người dùng hiện đại với theme tối, phù hợp cho ứng dụng giám sát.
+
+**Tăng tốc GPU:**
+
+Hệ thống hỗ trợ tăng tốc GPU thông qua CUDA (Compute Unified Device Architecture) của NVIDIA. Khi có GPU khả dụng, các mô hình YOLOv8 tự động chuyển sang chạy trên GPU, tăng tốc độ xử lý lên 5-10 lần so với CPU. Hỗ trợ FP16 (half precision) giúp tăng thêm 30-50% tốc độ trên GPU hiện đại mà không ảnh hưởng đáng kể đến độ chính xác.
+
+### 4.1.4 Môi trường phát triển Backend và Frontend
+
+**Backend Node.js:**
+
+Backend được xây dựng trên Node.js 18.x LTS, phiên bản hỗ trợ dài hạn đảm bảo tính ổn định. Express.js framework cung cấp cấu trúc cơ bản cho RESTful API với middleware pattern linh hoạt. MQTT client library cho phép backend đóng vai trò bridge giữa ESP32 và web frontend, nhận dữ liệu từ IoT devices và phân phối đến các clients qua HTTP.
+
+**Frontend Web:**
+
+Frontend được phát triển theo mô hình Single Page Application (SPA) sử dụng HTML5, CSS3, và JavaScript thuần (Vanilla JS) không phụ thuộc framework nặng. Cách tiếp cận này giảm độ phức tạp, tăng tốc độ tải trang, và dễ dàng bảo trì. Chart.js cung cấp các biểu đồ tương tác đẹp mắt cho visualization dữ liệu cảm biến. Supabase JS Client cho phép kết nối trực tiếp từ frontend đến database và nhận realtime updates.
+
+### 4.1.5 Cấu hình dịch vụ Cloud
+
+**HiveMQ Cloud - MQTT Broker:**
+
+HiveMQ Cloud được chọn làm MQTT broker nhờ độ tin cậy cao, hỗ trợ TLS/SSL mặc định, và gói miễn phí đủ cho mục đích nghiên cứu (100 kết nối đồng thời). Broker được triển khai tại region EU (châu Âu) với độ trễ thấp và uptime 99.9%. Cấu hình bảo mật bao gồm username/password authentication và mã hóa TLS 1.2+ cho tất cả kết nối.
+
+**Supabase - Backend as a Service:**
+
+Supabase cung cấp PostgreSQL database được quản lý hoàn toàn, RESTful API tự động, và realtime subscriptions. Gói miễn phí cung cấp 500 MB database storage và 1 GB file storage, đủ cho việc lưu trữ dữ liệu cảm biến và hình ảnh alert. Database được triển khai tại region Southeast Asia (Singapore) để giảm độ trễ cho người dùng khu vực. Row Level Security (RLS) được cấu hình để bảo vệ dữ liệu, chỉ cho phép truy cập qua service role key từ backend.
+
+**Render.com - Backend Hosting:**
+
+Render.com được chọn để triển khai backend Node.js nhờ quy trình deploy đơn giản (git push to deploy), hỗ trợ environment variables, và SSL certificate tự động. Gói miễn phí cung cấp 750 giờ runtime mỗi tháng, đủ cho việc chạy server 24/7. Server được triển khai tại region Singapore, gần với Supabase để giảm độ trễ khi truy vấn database.
+
+### 4.1.6 Thông số kỹ thuật môi trường
+
+**Thông số phần cứng mô phỏng:**
+
+ESP32 được mô phỏng với cấu hình đầy đủ: dual-core Xtensa LX6 240 MHz, 520 KB SRAM, 4 MB Flash, WiFi 802.11 b/g/n. Các cảm biến được mô phỏng với đặc tính gần với thực tế: DHT22 với độ phân giải 0.1°C và 0.1% RH, MQ-2 với ADC 12-bit (0-4095), Flame Sensor với output digital. Màn hình LCD 16x2 với giao tiếp I2C địa chỉ 0x27.
+
+**Thông số mạng và truyền thông:**
+
+Kết nối WiFi mô phỏng với SSID "Wokwi-GUEST" không mật khẩu. MQTT connection sử dụng protocol MQTTS (MQTT over TLS) port 8883, QoS level 0 cho sensor data (at most once), QoS level 1 cho commands (at least once). Keep-alive interval 60 giây, reconnect delay 3 giây khi mất kết nối.
+
+**Thông số AI và xử lý hình ảnh:**
+
+Mô hình YOLOv8n (nano) với input size 640x640 pixels, confidence threshold 0.4 cho pose detection, 0.25 cho weapon detection. Frame processing rate tối đa 30 FPS trên GPU, 5-10 FPS trên CPU. Buffer size cho keypoint tracking: 5-12 frames tùy thuộc detector. Image upload size tối đa 2 MB, format JPEG với quality 85%.
+
+**Thông số backend và API:**
+
+Backend API với rate limit 100 requests/minute per IP. Database connection pool size 10 connections. Sensor data persistence interval 5 phút (300 giây). Statistics cache TTL 10 giây. CORS enabled cho tất cả origins trong development, restricted trong production. JWT token expiration 24 giờ.
+
+
+## 4.2 Chạy mô phỏng và thu thập dữ liệu mô phỏng
+
+### 4.2.1 Khởi động hệ thống mô phỏng IoT
+
+**Quy trình khởi động Wokwi Simulator:**
+
+Quá trình khởi động mô phỏng ESP32 trên Wokwi bắt đầu bằng việc mở project trong Visual Studio Code với PlatformIO và Wokwi extension đã được cài đặt. File cấu hình `diagram.json` định nghĩa sơ đồ mạch điện tử bao gồm ESP32 DevKit C V4, màn hình LCD 16x2 với giao tiếp I2C, cảm biến DHT22, potentiometer mô phỏng MQ-2, flame sensor, và nút nhấn khẩn cấp. Khi nhấn nút Start Simulation, Wokwi compiler biên dịch firmware từ source code C++ và nạp vào ESP32 ảo.
+
+Trong quá trình khởi động, firmware thực hiện các bước initialization theo thứ tự: khởi tạo Serial communication với baudrate 115200, khởi tạo màn hình LCD và hiển thị logo "IoT Safety System", khởi tạo cảm biến DHT22, thiết lập các GPIO pins cho analog input (MQ-2) và digital input (Flame Sensor, Button). Sau đó, ESP32 kết nối WiFi đến mạng "Wokwi-GUEST" - một mạng ảo được Wokwi cung cấp với khả năng truy cập Internet thực tế. Quá trình kết nối WiFi thường mất 2-5 giây, được hiển thị qua LED nhấp nháy và thông báo trên Serial Monitor.
+
+**Thiết lập kết nối MQTT:**
+
+Sau khi có kết nối WiFi, ESP32 thiết lập kết nối MQTT đến HiveMQ Cloud broker. Quá trình này bao gồm: thiết lập TLS/SSL context với certificate validation, kết nối đến broker qua port 8883 với username và password, subscribe vào topic `wokwi/sensors/commands` để nhận lệnh điều khiển từ backend. Khi kết nối MQTT thành công, ESP32 gửi một message "ESP32 Connected" lên topic `wokwi/sensors/status` để thông báo trạng thái online. LCD hiển thị "MQTT Connected" và chuyển sang chế độ hiển thị dữ liệu cảm biến.
+
+**Vòng lặp đọc và gửi dữ liệu:**
+
+Sau khi hoàn tất initialization, ESP32 vào vòng lặp chính với chu kỳ 2 giây. Mỗi chu kỳ, firmware thực hiện: đọc nhiệt độ và độ ẩm từ DHT22 qua giao thức 1-Wire, đọc giá trị analog từ potentiometer (mô phỏng MQ-2) qua ADC 12-bit và chuyển đổi sang đơn vị ppm, đọc trạng thái digital từ flame sensor và nút nhấn khẩn cấp. Dữ liệu được đóng gói thành JSON object với cấu trúc chuẩn bao gồm timestamp, giá trị cảm biến, và ngưỡng cảnh báo hiện tại.
+
+JSON payload được publish lên topic `wokwi/sensors/data` với QoS 0 (at most once) vì dữ liệu cảm biến có tính real-time, việc mất một vài message không ảnh hưởng nghiêm trọng. Đồng thời, firmware kiểm tra các điều kiện cảnh báo: nhiệt độ vượt ngưỡng, gas vượt ngưỡng, hoặc phát hiện lửa. Nếu có cảnh báo, LCD chuyển sang chế độ nhấp nháy với màu đỏ và hiển thị loại cảnh báo. Danh sách các cảnh báo active được duy trì trong bộ nhớ và cập nhật trong mỗi message.
+
+### 4.2.2 Khởi động hệ thống AI
+
+**Quy trình khởi động AI System:**
+
+Hệ thống AI được khởi động bằng lệnh `python main.py` từ thư mục `Al_Python/Stroke_al`. Quá trình initialization bao gồm: load environment variables từ file `.env` chứa Supabase credentials, khởi tạo Supabase clients cho hai databases (stroke_events và airport_events), load các mô hình YOLOv8 (yolov8n-pose.pt cho pose estimation và yolov8n.pt cho object detection) vào memory và chuyển sang GPU nếu có.
+
+Giao diện CustomTkinter được khởi tạo với ba tabs chính: Live Detection cho giám sát real-time, Database Manager cho quản lý stroke events, và Airport Database cho quản lý airport events. Mỗi tab có các controls riêng: source selection (webcam/video file), frame skip slider, confidence threshold slider, và các nút Start/Stop. Theme tối được áp dụng mặc định để giảm mỏi mắt khi giám sát lâu dài.
+
+**Khởi tạo các detectors và trackers:**
+
+Khi người dùng chọn source và nhấn Start, hệ thống khởi tạo các components: StrokeDetector wrapper cho YOLOv8-Pose với confidence threshold 0.4, KeypointTracker với buffer size 12 frames để lưu lịch sử keypoints, StrokeRecognizerV2 với ba sub-detectors (SuddenFallDetector, AbnormalPostureDetector, GradualCollapseDetector). Đối với airport mode, thêm BaggageTracker và WeaponDetector với các thông số riêng.
+
+Video capture được mở từ webcam (index 0) hoặc video file. Frame rate được điều chỉnh dựa trên frame skip setting: skip=1 xử lý mọi frame (30 FPS), skip=3 xử lý mỗi 3 frames (10 FPS), giúp cân bằng giữa độ mượt và hiệu năng. Một thread riêng được tạo để xử lý video frames, tránh block GUI thread.
+
+**Vòng lặp xử lý video:**
+
+Mỗi frame được đọc từ video source, resize về kích thước chuẩn (thường 1280x720 hoặc 640x480 tùy source), và đưa qua pipeline xử lý: YOLOv8-Pose inference để detect người và keypoints, ByteTrack tracking để gán track ID ổn định, StrokeRecognizer phân tích keypoints để phát hiện các sự kiện đột quỵ, YOLOv8 Object Detection để phát hiện hành lý và vũ khí, BaggageTracker và WeaponDetector để phân tích và tạo alerts.
+
+Kết quả được visualize trên frame: bounding boxes với màu sắc theo trạng thái (xanh lá = bình thường, cam = cảnh báo, đỏ = nguy hiểm), keypoints skeleton cho pose, labels với track ID và event type, progress bars cho baggage abandon timer. Frame đã annotate được hiển thị trong GUI với FPS counter và statistics overlay.
+
+### 4.2.3 Khởi động Backend và Frontend
+
+**Khởi động Backend Server:**
+
+Backend Node.js được khởi động bằng lệnh `npm start` hoặc `npm run dev` (với nodemon auto-restart). Quá trình initialization bao gồm: load environment variables từ `.env`, khởi tạo Express app với middleware (CORS, JSON parser, static file serving), khởi tạo Supabase client với service role key để có quyền admin, thiết lập MQTT client và kết nối đến HiveMQ Cloud broker.
+
+MQTT client subscribe vào topic `wokwi/sensors/#` (wildcard để nhận tất cả subtopics) và đăng ký callback handler. Khi nhận được message, callback parse JSON payload, normalize dữ liệu (xử lý giá trị null, NaN), phát hiện alerts bằng cách so sánh với ngưỡng, lưu vào in-memory cache để phục vụ API `/api/sensor/latest`, và định kỳ persist vào Supabase database mỗi 5 phút hoặc khi có alert mới.
+
+Express server lắng nghe trên port được định nghĩa trong environment variable (mặc định 3001). Các API endpoints được đăng ký: `/api/health` cho health check, `/api/sensor/latest` cho dữ liệu cảm biến mới nhất, `/api/statistics` cho thống kê, `/api/database/*` cho CRUD operations, `/api/history` cho lịch sử alerts. Middleware authentication kiểm tra JWT token trong Authorization header cho các endpoints protected.
+
+**Khởi động Frontend:**
+
+Frontend được serve bằng Live Server extension trong VS Code hoặc HTTP server đơn giản. Khi người dùng truy cập URL, browser tải `index.html` cùng với `style.css` và `main.js`. JavaScript initialization bao gồm: kiểm tra localStorage để tìm saved auth token, nếu có token thì verify với backend qua `/api/health`, nếu valid thì hiển thị app layout, nếu không thì hiển thị login screen.
+
+Sau khi login thành công, frontend khởi tạo: Supabase client cho realtime subscriptions, Chart.js instances cho các biểu đồ (temperature chart, humidity chart, gas chart), polling intervals để cập nhật dữ liệu mỗi 2 giây, event listeners cho các buttons và forms. Realtime subscription được thiết lập cho bảng `stroke_events` và `airport_events` để nhận thông báo ngay khi có alert mới từ AI system.
+
+### 4.2.4 Thu thập dữ liệu cảm biến
+
+**Cơ chế thu thập từ ESP32:**
+
+Dữ liệu cảm biến được thu thập theo chu kỳ 2 giây từ ESP32. Mỗi lần đọc, firmware thực hiện error handling: nếu DHT22 trả về NaN (sensor error), giữ nguyên giá trị cũ và tăng error counter; nếu ADC đọc giá trị ngoài range (0-4095), clamp về giá trị hợp lệ; nếu flame sensor không phản hồi, assume trạng thái an toàn (no fire). Dữ liệu sau khi validate được đóng gói thành JSON với timestamp (milliseconds since boot).
+
+JSON message được gửi qua MQTT với retained flag = false (không lưu message cuối cùng trên broker) và QoS = 0 (fire and forget). Nếu publish thất bại (broker offline, network error), firmware log error vào Serial và retry trong lần gửi tiếp theo. Không có queue mechanism để tránh memory overflow trên ESP32 với RAM hạn chế.
+
+**Lưu trữ vào Backend:**
+
+Backend nhận message từ MQTT callback, parse JSON, và lưu vào in-memory object `latestSensorData` với cấu trúc:
+
 ```javascript
-// Supabase Realtime
-const subscription = supabase
-    .channel('ai_events')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'stroke_events' },
-        (payload) => updateLatestImage(payload.new.image_url)
-    )
-    .subscribe();
+{
+  temperature: { value: 28.5, unit: "°C", warning: false, threshold: 50 },
+  humidity: { value: 65.2, unit: "%", warning: false, threshold: 80 },
+  gas: { value: 1234, unit: "ppm", warning: false, threshold: 2000 },
+  fire: { detected: false, warning: false },
+  timestamp: "2026-05-26T10:30:45.123Z",
+  alerts: []
+}
 ```
 
-### 4.4.5 Deployment
+Mỗi 5 phút, hoặc khi có alert mới lần đầu, backend gọi hàm `persistSensorData()` để lưu vào Supabase bảng `sensor_data`. Batch insert được sử dụng để giảm số lượng database calls: một record cho temperature, một cho humidity, một cho gas. Fire events được lưu riêng vào bảng `fire_events` nếu có.
 
-**Local Development:**
-```bash
-cd frontend
-# Option 1: Live Server (VS Code extension)
-# Option 2: Python HTTP server
-python -m http.server 8000
-```
+**Thu thập dữ liệu AI:**
 
-**Production:**
-- Deploy lên Render.com Static Site
-- Hoặc Netlify, Vercel, GitHub Pages
+Khi AI system phát hiện event (stroke, abandoned baggage, weapon), quá trình thu thập dữ liệu bao gồm: capture frame hiện tại từ video stream, crop bounding box của đối tượng liên quan (người bị đột quỵ, hành lý, vũ khí), resize về kích thước chuẩn (max 1920x1080), encode thành JPEG với quality 85%, upload lên Supabase Storage bucket tương ứng (alerts/, baggage/, weapons/).
 
-## 4.5 Xây dựng Backend
+Sau khi upload thành công, URL của ảnh được lấy từ Storage API và lưu cùng với metadata vào database table tương ứng. Metadata bao gồm: event_type, track_id, confidence score, bounding box coordinates, keypoints (nếu có), timestamp, location (nếu có GPS). Toàn bộ quá trình được thực hiện trong thread riêng để không block video processing.
 
-### 4.5.1 Cấu trúc code
+### 4.2.5 Giám sát và logging
 
-**File: server.js**
+**Serial Monitor cho ESP32:**
 
-**Sections:**
-1. **Imports và Setup** (dòng 1-50)
-2. **Configuration** (dòng 51-100)
-3. **MQTT Client** (dòng 101-200)
-4. **Authentication** (dòng 201-300)
-5. **Data Processing** (dòng 301-500)
-6. **API Routes** (dòng 501-800)
-7. **Server Start** (dòng 801-850)
+Wokwi Serial Monitor hiển thị real-time logs từ ESP32 với các thông tin: WiFi connection status, MQTT connection status, sensor readings mỗi 2 giây, alert triggers, command received từ backend, error messages. Log format được thiết kế dễ đọc với emoji icons: ✅ cho success, ❌ cho error, ⚠️ cho warning, 📊 cho data, 🔥 cho fire alert.
 
-### 4.5.2 Cấu hình .env
+**Console logs cho AI System:**
 
-```env
-# Server
-PORT=3001
-AUTH_SECRET=iot-demo-auth-secret
+Terminal chạy AI system hiển thị: model loading progress, frame processing FPS, detection results (số người detected, số hành lý, số vũ khí), event triggers với timestamp và track ID, upload status cho mỗi ảnh, database insert confirmations, error stack traces nếu có exception. Logging level có thể điều chỉnh qua environment variable (DEBUG, INFO, WARNING, ERROR).
 
-# MQTT
-MQTT_BROKER=0cf84da2cc5b47ccb9613aee2edcc06b.s1.eu.hivemq.cloud
-MQTT_PORT=8883
-MQTT_PROTOCOL=mqtts
-MQTT_USERNAME=doantuan
-MQTT_PASSWORD=Tuan1234
-MQTT_SENSOR_TOPIC=wokwi/sensors/#
-MQTT_COMMAND_TOPIC=wokwi/sensors/commands
+**Backend API logs:**
 
-# Supabase
-SUPABASE_URL=https://ypddfcoesrtvjabyqqta.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-SURVEILLANCE_BUCKET=surveillance-images
+Backend console hiển thị: HTTP requests với method, path, status code, response time, MQTT messages received với topic và payload size, database operations với query time, authentication attempts (success/failure), error stack traces. Morgan middleware được sử dụng để format HTTP logs theo chuẩn Apache combined log format.
 
-# Auth Users
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=admin123
-USER_USERNAME=user
-USER_PASSWORD=user123
-```
+**Frontend console logs:**
 
-### 4.5.3 Chạy server
-
-**Development:**
-```bash
-cd backend
-npm install
-npm run dev
-```
-
-**Production:**
-```bash
-npm start
-```
-
-Server chạy tại: `http://localhost:3001`
-
-### 4.5.4 Deploy lên Render.com
-
-**Bước 1: Tạo repository GitHub**
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-git remote add origin https://github.com/username/iot-backend.git
-git push -u origin main
-```
-
-**Bước 2: Tạo Web Service trên Render**
-- New → Web Service
-- Connect GitHub repository
-- Build Command: `npm install`
-- Start Command: `npm start`
-- Environment: Node
-- Plan: Free
-
-**Bước 3: Thêm Environment Variables**
-- Vào Settings → Environment
-- Thêm tất cả biến từ .env
-
-**Bước 4: Deploy**
-- Click "Manual Deploy" hoặc push code lên GitHub
-- Render tự động build và deploy
-
-**URL:** `https://backend-iot-0ud5.onrender.com`
-
-
-## 4.6 Thiết kế thông số mô phỏng
-
-### 4.6.1 Thông số cảm biến
-
-**DHT22 (Nhiệt độ và Độ ẩm):**
-- Nhiệt độ bình thường: 25-30°C
-- Nhiệt độ nguy hiểm: > 50°C (ngưỡng mặc định)
-- Độ ẩm bình thường: 50-70%
-- Độ ẩm cao: > 80% (ngưỡng mặc định)
-- Tần suất đọc: Mỗi 2 giây
-
-**MQ-2 (Gas Sensor - Potentiometer):**
-- Giá trị bình thường: 0-1500 ppm
-- Giá trị nguy hiểm: > 2000 ppm (ngưỡng mặc định)
-- Range: 0-4095 (ADC 12-bit)
-- Điều chỉnh: Xoay potentiometer trong Wokwi
-
-**Flame Sensor:**
-- Output: Digital (HIGH/LOW)
-- LOW = Phát hiện lửa
-- HIGH = Không có lửa
-- Kết hợp với nút nhấn thủ công (GPIO 26)
-
-### 4.6.2 Thông số MQTT
-
-**Connection:**
-- Keep-alive: 60 giây
-- Reconnect period: 3 giây
-- QoS: 0 (At most once)
-- Clean session: true
-
-**Message Rate:**
-- Publish: Mỗi 2 giây
-- Payload size: ~150 bytes (JSON)
-- Bandwidth: ~75 bytes/s
-
-### 4.6.3 Thông số AI
-
-**YOLOv8-Pose:**
-- Input size: 640x640
-- Confidence threshold: 0.4
-- Keypoint confidence: 0.25
-- FPS target: 30 (với GPU)
-
-**YOLOv8 Object Detection:**
-- Input size: 640x640
-- Confidence threshold: 0.4 (baggage), 0.25 (weapon)
-- Frame skip: 3 frames
-- NMS IoU threshold: 0.45
-
-**Stroke Detection:**
-- Sudden Fall velocity: > 7% frame height
-- Abnormal Posture aspect ratio: > 1.2
-- Sustained frames: 6 (Abnormal), 5 (Collapse)
-- Buffer size: 5-12 frames
-
-**Baggage Tracking:**
-- Owner radius: 160 pixels
-- Abandon timeout: 60 giây
-- Alert cooldown: 120 giây
-- Grace period: 3 giây
-
-**Weapon Detection:**
-- Bearer radius: 130 pixels
-- Alert cooldown: 25 giây
-- Confidence minimum: 0.25
-
-### 4.6.4 Thông số Backend
-
-**API Rate Limits:**
-- Health check: Mỗi 2 giây (frontend polling)
-- Statistics: Cache 10 giây
-- Database queries: Limit 100-200 rows
-
-**Sensor Persist:**
-- Periodic: Mỗi 5 phút (300,000 ms)
-- Immediate: Khi có alert lần đầu
-- Batch size: 3 records (temp, humi, gas)
-
-**Memory:**
-- Latest sensor data: In-memory
-- Alert history: 50 alerts (in-memory)
-- MQTT buffer: Default (mqtt library)
-
-## 4.7 Thiết kế các kịch bản mô phỏng
-
-### 4.7.1 Kịch bản 1: Cảnh báo nhiệt độ cao
-
-**Mục tiêu:** Kiểm tra phát hiện nhiệt độ vượt ngưỡng
-
-**Các bước:**
-1. Khởi động Wokwi simulation
-2. Đợi ESP32 kết nối MQTT (xem Serial Monitor)
-3. Mở Web Dashboard
-4. Quan sát nhiệt độ hiện tại trên card "Nhiệt độ"
-5. Trong Wokwi, click vào DHT22 sensor
-6. Điều chỉnh nhiệt độ lên > 50°C
-7. Đợi 2 giây (chu kỳ gửi dữ liệu)
-
-**Kết quả mong đợi:**
-- LCD nhấp nháy hiển thị "TEMP ALERT"
-- Web hiển thị alert banner màu đỏ
-- Card "Nhiệt độ" có viền đỏ (danger-glow)
-- Toast notification xuất hiện
-- Dữ liệu được lưu vào Supabase với `warning` field
-
-### 4.7.2 Kịch bản 2: Cảnh báo gas vượt ngưỡng
-
-**Mục tiêu:** Kiểm tra phát hiện gas nguy hiểm
-
-**Các bước:**
-1. Trong Wokwi, tìm Potentiometer (label: "Gas Sensor MQ-2 Sim")
-2. Click và kéo slider lên giá trị > 2000
-3. Đợi 2 giây
-
-**Kết quả mong đợi:**
-- LCD hiển thị "GAS ALERT"
-- Web hiển thị cảnh báo gas
-- Card "Nồng độ gas" có viền đỏ
-- Message: "Gas X ppm vượt ngưỡng 2000 ppm"
-
-### 4.7.3 Kịch bản 3: Cảnh báo lửa
-
-**Mục tiêu:** Kiểm tra phát hiện lửa
-
-**Các bước:**
-1. Trong Wokwi, click nút đỏ "LỬA" (GPIO 26)
-2. Hoặc click vào Flame Sensor để kích hoạt
-
-**Kết quả mong đợi:**
-- LCD hiển thị "FIRE ALERT"
-- Card "Trạng thái lửa" hiển thị "Nguy hiểm" màu đỏ
-- Alert banner: "Phát hiện lửa hoặc tín hiệu cháy"
-- Dữ liệu lưu với `fire_detected = true`
-
-### 4.7.4 Kịch bản 4: Điều khiển ngưỡng từ xa
-
-**Mục tiêu:** Kiểm tra gửi lệnh MQTT từ Web
-
-**Các bước:**
-1. Trong Web Dashboard, tìm "Cài đặt ngưỡng cảnh báo"
-2. Thay đổi "Ngưỡng gas" từ 2000 → 1500
-3. Click nút "Lưu"
-4. Quan sát Serial Monitor trong Wokwi
-
-**Kết quả mong đợi:**
-- Serial Monitor hiển thị: "✅ SET GAS THRESHOLD: 1500 PPM"
-- ESP32 cập nhật biến `THRESHOLD_GAS_PPM = 1500`
-- Lần gửi dữ liệu tiếp theo sẽ có `th_gas: 1500`
-- Web hiển thị "Ngưỡng: 1500 ppm"
-
-### 4.7.5 Kịch bản 5: Phát hiện đột quỵ (Sudden Fall)
-
-**Mục tiêu:** Kiểm tra AI phát hiện ngã đột ngột
-
-**Các bước:**
-1. Chạy AI System: `python main.py`
-2. Chọn source: Webcam hoặc video file
-3. Click "Start Detection"
-4. Đứng trước camera
-5. Thực hiện động tác ngã nhanh xuống đất
-
-**Kết quả mong đợi:**
-- Bounding box màu đỏ quanh người
-- Label: "ID:X | Sudden_Fall"
-- Alert text: "⚠ ALERT: SUDDEN_FALL"
-- Ảnh được upload lên Supabase (folder: alerts/)
-- Record mới trong bảng `stroke_events` với `event_type = 'Sudden_Fall'`
-- Web hiển thị ảnh mới trong "Luồng giám sát mới nhất"
-
-### 4.7.6 Kịch bản 6: Phát hiện hành lý bỏ lại
-
-**Mục tiêu:** Kiểm tra phát hiện abandoned baggage
-
-**Các bước:**
-1. Chạy AI System
-2. Đặt ba lô/túi xách trước camera
-3. Đứng gần túi (trong bán kính 160px)
-4. Đợi hệ thống detect và track
-5. Rời xa túi (ngoài bán kính 160px)
-6. Đợi 60 giây
-
-**Kết quả mong đợi:**
-- Bounding box xanh lá khi có chủ: "backpack ✓ có chủ"
-- Chuyển sang màu cam khi chủ rời đi: "backpack ⚠ 45s"
-- Progress bar đếm ngược
-- Sau 60s, chuyển màu đỏ: "backpack 🚨 BỎ LẠI 65s"
-- Ảnh upload lên Supabase (folder: baggage/)
-- Record trong `airport_events` với `event_type = 'abandoned_baggage'`
-
-### 4.7.7 Kịch bản 7: Thống kê và lịch sử
-
-**Mục tiêu:** Kiểm tra chức năng thống kê
-
-**Các bước:**
-1. Tạo nhiều alerts (sensor và AI) trong vài ngày
-2. Vào trang "Thống kê"
-3. Chọn "Thống kê cảm biến" → "7 ngày gần nhất"
-4. Quan sát biểu đồ và summary cards
-5. Chọn "Thống kê cảnh báo từ AI" → "Hôm nay"
-6. Quan sát frequency list
-
-**Kết quả mong đợi:**
-- Biểu đồ hiển thị xu hướng nhiệt độ, độ ẩm, gas
-- Summary cards hiển thị giá trị trung bình
-- AI statistics hiển thị số lượng theo từng bảng
-- Frequency list với progress bars
-
-### 4.7.8 Kịch bản 8: Quản lý Database (Admin)
-
-**Mục tiêu:** Kiểm tra CRUD operations
-
-**Các bước:**
-1. Đăng nhập với tài khoản admin (admin/admin123)
-2. Vào trang "Cơ sở dữ liệu"
-3. Chọn bảng "stroke_events"
-4. Chọn khoảng thời gian
-5. Click "Lọc"
-6. Click nút "Xóa" trên một row
-7. Confirm deletion
-
-**Kết quả mong đợi:**
-- Table hiển thị dữ liệu đúng
-- Xóa row thành công
-- Ảnh trên Storage cũng bị xóa
-- Toast notification: "Đã xóa record"
-- Table refresh tự động
-
----
-
-# KẾT LUẬN
-
-## Kết quả đạt được
-
-Đồ án đã hoàn thành mục tiêu xây dựng hệ thống giám sát an toàn thông minh tích hợp IoT và AI với các kết quả cụ thể:
-
-**1. Phần IoT (ESP32):**
-- ✅ Firmware hoạt động ổn định trên Wokwi
-- ✅ Đọc chính xác 3 loại cảm biến (DHT22, MQ-2, Flame)
-- ✅ Kết nối MQTT với HiveMQ Cloud qua TLS
-- ✅ Gửi dữ liệu JSON mỗi 2 giây
-- ✅ Nhận lệnh điều khiển ngưỡng từ xa
-- ✅ Hiển thị thông tin và cảnh báo trên LCD 16x2
-
-**2. Phần AI (Python):**
-- ✅ Phát hiện đột quỵ với 3 detectors (độ chính xác 78-92%)
-- ✅ Phát hiện hành lý bỏ lại với timeout 60s
-- ✅ Phát hiện vũ khí nguy hiểm
-- ✅ Tracking ổn định với ByteTrack
-- ✅ Upload ảnh alert lên Supabase tự động
-- ✅ GUI hiện đại với CustomTkinter
-
-**3. Phần Backend (Node.js):**
-- ✅ REST API hoàn chỉnh với 8 endpoints
-- ✅ MQTT client subscribe và publish
-- ✅ Authentication với JWT (2 roles: admin, user)
-- ✅ Xử lý và normalize dữ liệu cảm biến
-- ✅ Phát hiện alert tự động
-- ✅ Thống kê theo thời gian (today, 7d, 30d)
-- ✅ Deploy thành công lên Render.com
-
-**4. Phần Frontend (Web):**
-- ✅ Giao diện responsive (desktop + mobile)
-- ✅ Dashboard real-time với 4 sensor cards
-- ✅ Biểu đồ thống kê với Chart.js
-- ✅ Hiển thị ảnh AI mới nhất
-- ✅ Quản lý database (admin only)
-- ✅ Lịch sử cảnh báo
-- ✅ Realtime updates với Supabase subscriptions
-
-**5. Tích hợp Cloud:**
-- ✅ Supabase: 4 bảng (sensor_data, stroke_events, airport_events, baggage_tracks)
-- ✅ Storage: 3 folders (alerts, baggage, weapons)
-- ✅ HiveMQ Cloud: MQTTS với TLS
-- ✅ Render.com: Backend deployment
-
-## Hạn chế và hướng phát triển
-
-**Hạn chế hiện tại:**
-1. **False Positives**: AI có thể nhầm tư thế ngồi/nằm bình thường với đột quỵ
-2. **Phụ thuộc Internet**: Mất kết nối → mất dữ liệu
-3. **Chưa có Edge Computing**: AI chạy trên máy tính, chưa tối ưu cho thiết bị nhúng
-4. **Chưa có thông báo SMS/Email**: Chỉ cảnh báo trên Web
-5. **Mô phỏng**: Chưa test trên phần cứng thật
-
-**Hướng phát triển:**
-1. **Cải thiện AI**:
-   - Fine-tune YOLOv8 trên dataset custom
-   - Thêm ML model cho stroke detection (thay rule-based)
-   - Tích hợp face recognition để nhận diện người
-
-2. **Edge Computing**:
-   - Port AI sang TensorFlow Lite
-   - Chạy trên Raspberry Pi hoặc Jetson Nano
-   - Giảm latency và phụ thuộc cloud
-
-3. **Thông báo đa kênh**:
-   - SMS qua Twilio
-   - Email qua SendGrid
-   - Push notification qua Firebase
-
-4. **Mở rộng cảm biến**:
-   - Thêm camera IP
-   - Cảm biến chuyển động PIR
-   - Cảm biến áp suất, độ rung
-
-5. **Triển khai thực tế**:
-   - Test trên phần cứng ESP32 thật
-   - Triển khai tại bệnh viện, sân bay
-   - Thu thập feedback và cải thiện
-
-## Đánh giá chung
-
-Đồ án đã đạt được mục tiêu ban đầu, tạo ra một hệ thống hoàn chỉnh từ IoT đến AI, từ Backend đến Frontend. Hệ thống có khả năng mở rộng tốt, dễ bảo trì, và có thể ứng dụng thực tế trong nhiều lĩnh vực.
-
-Điểm mạnh của đồ án là sự tích hợp đa công nghệ (IoT, AI, Cloud, Web) một cách mượt mà, tạo ra trải nghiệm người dùng tốt với giao diện hiện đại và dữ liệu real-time.
-
----
-
-# PHỤ LỤC
-
-## A. Danh sách công nghệ và thư viện
-
-**IoT (ESP32):**
-- PlatformIO 6.1+
-- Arduino Framework
-- PubSubClient 2.8
-- DHT sensor library 1.4.4
-- ArduinoJson 7.0.4
-- LiquidCrystal_I2C 1.1.4
-
-**AI (Python):**
-- Python 3.10+
-- PyTorch 2.0+
-- Ultralytics (YOLOv8) 8.1+
-- OpenCV 4.8+
-- NumPy 1.24+
-- Supabase 2.4+
-- CustomTkinter 5.2+
-
-**Backend (Node.js):**
-- Node.js 18.x LTS
-- Express.js 5.2.1
-- MQTT 5.15.1
-- @supabase/supabase-js 2.105.4
-- CORS 2.8.6
-- dotenv 17.4.2
-
-**Frontend:**
-- HTML5, CSS3, JavaScript ES6+
-- Chart.js 4.x
-- Lucide Icons
-- Supabase JS Client 2.x
-
-**Cloud Services:**
-- HiveMQ Cloud (MQTT Broker)
-- Supabase (Database + Storage)
-- Render.com (Backend Hosting)
-
-## B. Tài liệu tham khảo
-
-1. **ESP32 Documentation**: https://docs.espressif.com/projects/esp-idf/
-2. **MQTT Protocol**: https://mqtt.org/
-3. **YOLOv8 Documentation**: https://docs.ultralytics.com/
-4. **Supabase Documentation**: https://supabase.com/docs
-5. **Node.js Documentation**: https://nodejs.org/docs/
-6. **Wokwi Simulator**: https://docs.wokwi.com/
-
-## C. Source Code Repository
-
-- **GitHub**: https://github.com/username/iot-project
-- **IoT Firmware**: /IOT
-- **AI System**: /Al_Python/Stroke_al
-- **Backend**: /WEB_IOT/backend
-- **Frontend**: /WEB_IOT/frontend
-
----
+Browser DevTools Console hiển thị: API calls với request/response data, Supabase realtime events, Chart.js updates, authentication state changes, error messages từ failed API calls. Production build có thể disable console.log để tăng performance và bảo mật.
 
 **HẾT**
 
