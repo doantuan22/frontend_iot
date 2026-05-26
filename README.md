@@ -923,363 +923,212 @@ elf = ".pio/build/esp32dev/firmware.elf"
 
 Chỉ định file firmware được build bởi PlatformIO.
 
-## 3.4 Phát triển và Train mô hình AI
+## 3.4 Phát triển và triển khai mô hình AI
 
-### 3.4.1 Mô hình YOLOv8-Pose
+### 3.4.1 Lựa chọn mô hình YOLOv8
 
-**Không cần training:**
-- Sử dụng pre-trained model `yolov8n-pose.pt`
-- Đã được train trên COCO dataset với 17 keypoints
-- Độ chính xác đủ tốt cho phát hiện đột quỵ
+**YOLOv8-Pose cho Pose Estimation:**
 
-**Keypoints COCO 17:**
-```
-0: nose          5: left_shoulder    11: left_hip
-1: left_eye      6: right_shoulder   12: right_hip
-2: right_eye     7: left_elbow       13: left_knee
-3: left_ear      8: right_elbow      14: right_knee
-4: right_ear     9: left_wrist       15: left_ankle
-                10: right_wrist      16: right_ankle
-```
+Hệ thống sử dụng mô hình pre-trained `yolov8n-pose.pt` đã được huấn luyện trên COCO dataset với 17 keypoints. Mô hình này không cần training lại vì:
 
-### 3.4.2 Mô hình YOLOv8 Object Detection
+- Dataset COCO chứa hơn 200,000 ảnh người với keypoint annotations chất lượng cao
+- Độ chính xác của mô hình (mAP 50-95: ~50%) đủ tốt cho phát hiện tư thế bất thường
+- Keypoints COCO 17 bao gồm đầy đủ các điểm khớp cần thiết: mũi, mắt, tai, vai, khuỷu tay, cổ tay, hông, đầu gối, mắt cá chân
 
-**Sử dụng COCO classes:**
-- Class 0: person
-- Class 24: backpack
-- Class 26: handbag
-- Class 28: suitcase
-- Class 43: knife
+**YOLOv8 cho Object Detection:**
 
-**Không cần training thêm** vì COCO dataset đã có các classes này.
+Mô hình `yolov8n.pt` được sử dụng để phát hiện hành lý và vũ khí. COCO dataset đã bao gồm các classes cần thiết:
+- Class 0 (person): Phát hiện người để xác định owner/bearer
+- Class 24, 26, 28 (backpack, handbag, suitcase): Phát hiện hành lý
+- Class 43 (knife): Phát hiện vũ khí cơ bản
 
 **Tùy chọn mở rộng:**
-- Fine-tune trên dataset custom từ Roboflow
-- Thêm classes: gun, pistol, rifle, scissors
-- Export sang TensorRT engine để tăng tốc độ
 
-### 3.4.3 Thuật toán Stroke Detection
+Để tăng độ chính xác phát hiện vũ khí, có thể fine-tune mô hình trên dataset chuyên biệt từ Roboflow hoặc tự thu thập, bao gồm thêm các classes: gun, pistol, rifle, scissors. Quá trình fine-tuning sử dụng transfer learning, chỉ cần 500-1000 ảnh annotated và training 50-100 epochs.
 
-**Không phải ML model**, mà là **rule-based algorithm** sử dụng:
-- Keypoint positions
-- Velocity calculation
-- Aspect ratio analysis
-- Temporal consistency (sustained frames)
+### 3.4.2 Thiết kế thuật toán phát hiện đột quỵ
 
-**Ưu điểm:**
-- Không cần training data
-- Không cần GPU mạnh
-- Dễ điều chỉnh ngưỡng
-- Giải thích được (explainable)
+Thuật toán phát hiện đột quỵ là **rule-based system** kết hợp 3 detectors độc lập, không phải deep learning model. Mỗi detector phân tích các đặc trưng khác nhau từ keypoints:
 
-**Nhược điểm:**
-- Phụ thuộc vào ngưỡng cứng
-- Có thể false positive với tư thế ngồi/nằm bình thường
+**Detector 1: Sudden Fall (Ngã đột ngột)**
 
-### 3.4.4 Thuật toán Abandoned Baggage Detection
+Phát hiện dựa trên vận tốc di chuyển của keypoint hông (hip) theo phương thẳng đứng:
 
-**Nguyên lý hoạt động:**
+- Tính toán: `velocity = Δy_hip / Δt` qua 5 frames gần nhất
+- Ngưỡng: `max_velocity > 7% * frame_height`
+- Confidence: 0.92 (92%)
 
-Thuật toán phát hiện hành lý bỏ lại sử dụng **state machine** kết hợp với **proximity detection**:
+**Detector 2: Abnormal Posture (Tư thế bất thường)**
 
-**Bước 1: Object Detection**
+Phát hiện người nằm ngang hoặc tư thế không tự nhiên:
+
+- Điều kiện 1: `aspect_ratio = bbox_width / bbox_height > 1.2`
+- Điều kiện 2: `bbox_height < 45% * frame_height`
+- Điều kiện 3: Đầu/vai thấp hơn hông (margin 15%)
+- Sustained: 6 frames liên tục để giảm false positive
+- Confidence: 0.87 (87%)
+
+**Detector 3: Gradual Collapse (Suy sụp từ từ)**
+
+Phát hiện người từ từ ngã xuống qua 12 frames:
+
+- Theo dõi aspect ratio tăng dần
+- Velocity trung bình: `> 2.5% * frame_height`
+- Sustained: 5 frames
+- Confidence: 0.78 (78%)
+
+**Ưu điểm của rule-based approach:**
+
+- Không cần dataset đột quỵ (rất khó thu thập)
+- Giải thích được (explainable AI) - biết chính xác tại sao alert
+- Dễ điều chỉnh ngưỡng theo môi trường cụ thể
+- Chạy nhanh, không cần GPU mạnh
+
+**Hạn chế:**
+
+- Phụ thuộc vào ngưỡng cứng, cần fine-tuning cho từng camera
+- False positive với tư thế ngồi/nằm bình thường (yoga, nghỉ ngơi)
+- Cần keypoints chất lượng cao (confidence > 0.25)
+
+### 3.4.3 Thiết kế thuật toán phát hiện hành lý bỏ lại
+
+Thuật toán sử dụng **state machine** kết hợp **proximity detection** và **timer mechanism**:
+
+**Kiến trúc tổng thể:**
+
+1. **Object Detection & Tracking**: YOLOv8 phát hiện hành lý (backpack, handbag, suitcase) và ByteTrack gán track_id ổn định
+2. **Owner Detection**: Tìm người (person) trong bán kính 160 pixels từ tâm hành lý
+3. **State Management**: Theo dõi trạng thái "có chủ" / "không có chủ" của mỗi hành lý
+4. **Timer**: Đếm thời gian hành lý không có chủ
+5. **Alert Generation**: Kích hoạt cảnh báo khi thời gian vượt 60 giây
+
+**Cấu trúc dữ liệu BaggageState:**
+
+Mỗi hành lý được tracking có một state object chứa:
+- `track_id`: ID duy nhất từ ByteTrack
+- `object_class`: Loại hành lý (backpack/handbag/suitcase)
+- `bbox`: Tọa độ bounding box [x1, y1, x2, y2]
+- `owner_gone_at`: Timestamp lúc chủ rời đi (None nếu đang có chủ)
+- `alerted`: Flag đánh dấu đã gửi alert
+- `last_alert_at`: Timestamp alert gần nhất (cho cooldown)
+
+**Xử lý các trường hợp đặc biệt:**
+
+1. **Non-Maximum Suppression (NMS)**: Loại bỏ bounding boxes trùng lặp khi YOLO phát hiện cùng một hành lý với nhiều classes khác nhau. Sử dụng IoU threshold 0.45.
+
+2. **Track Switching**: Khi ByteTrack đổi ID do occlusion, hệ thống kế thừa state cũ dựa trên IoU giữa bbox cũ và mới.
+
+3. **Grace Period**: Cho phép chủ rời đi tạm thời 3 giây trước khi bắt đầu đếm thời gian bỏ lại.
+
+4. **Alert Cooldown**: 120 giây giữa các alerts cho cùng một hành lý để tránh spam.
+
+**Ví dụ code mô phỏng logic chính:**
+
 ```python
-# Phát hiện hành lý bằng YOLOv8
-BAGGAGE_CLASS_IDS = {
-    24: 'backpack',
-    26: 'handbag', 
-    28: 'suitcase'
-}
-
-bags = object_detector.track(
-    frame, 
-    classes=[24, 26, 28],
-    conf=0.22  # Ngưỡng confidence thấp để phát hiện tốt hơn
-)
-```
-
-**Bước 2: Non-Maximum Suppression (NMS)**
-```python
-# Loại bỏ bounding box trùng lặp
-def apply_nms(bags, iou_threshold=0.45):
-    bags = sorted(bags, key=lambda x: x['conf'], reverse=True)
-    keep_bags = []
-    for bag in bags:
-        overlap = False
-        for kept in keep_bags:
-            if calculate_iou(bag['bbox'], kept['bbox']) > iou_threshold:
-                overlap = True
-                break
-        if not overlap:
-            keep_bags.append(bag)
-    return keep_bags
-```
-
-**Bước 3: Owner Detection**
-```python
-# Tìm người trong bán kính 160px
-def find_owner(bag_center, persons, radius=160):
-    for person in persons:
-        person_center = get_bbox_center(person['bbox'])
-        distance = euclidean_distance(bag_center, person_center)
-        if distance <= radius:
-            return person['track_id']
-    return None
-```
-
-**Bước 4: State Management**
-```python
-@dataclass
-class BaggageState:
-    track_id: int
-    object_class: str
-    bbox: list
-    owner_gone_at: Optional[float] = None  # Timestamp chủ rời đi
-    last_alert_at: float = 0.0
-    alerted: bool = False
-    
-    @property
-    def abandon_seconds(self) -> float:
-        if self.owner_gone_at is None:
-            return 0.0
-        return time.time() - self.owner_gone_at
-    
-    @property
-    def is_suspicious(self, timeout=60.0) -> bool:
-        return self.abandon_seconds >= timeout
-```
-
-**Bước 5: Alert Logic**
-```python
-def update(self, objects, persons):
+def update_baggage_tracking(bags, persons):
+    """Cập nhật trạng thái tracking và trả về alerts"""
     alerts = []
-    for bag in objects:
-        tid = bag['track_id']
-        owner_id = find_owner(bag['bbox'], persons)
+    
+    for bag in bags:
+        # Tìm owner trong bán kính 160px
+        owner_id = find_nearest_person(bag['bbox'], persons, radius=160)
         
-        if tid not in self._states:
-            # Tạo state mới
-            self._states[tid] = BaggageState(
-                track_id=tid,
-                object_class=bag['class_name'],
-                bbox=bag['bbox']
-            )
+        if bag['track_id'] not in states:
+            # Tạo state mới cho hành lý lần đầu xuất hiện
+            states[bag['track_id']] = BaggageState(bag)
         
-        state = self._states[tid]
+        state = states[bag['track_id']]
         
-        if owner_id is not None:
+        if owner_id:
             # Có chủ → reset timer
             state.owner_gone_at = None
             state.alerted = False
         else:
             # Không có chủ
-            if state.owner_gone_at is None:
-                # Lần đầu mất chủ → bắt đầu đếm
-                state.owner_gone_at = time.time()
-            elif state.abandon_seconds >= 60.0 and not state.alerted:
-                # Vượt timeout → alert
-                alerts.append({
-                    'event_type': 'abandoned_baggage',
-                    'track_id': tid,
-                    'object_class': state.object_class,
-                    'duration_sec': state.abandon_seconds,
-                    'bbox': state.bbox,
-                    'risk_level': 'high'
-                })
+            if not state.owner_gone_at:
+                state.owner_gone_at = time.time()  # Bắt đầu đếm
+            
+            abandon_time = time.time() - state.owner_gone_at
+            
+            if abandon_time >= 60 and not state.alerted:
+                # Vượt ngưỡng → tạo alert
+                alerts.append(create_alert(state, abandon_time))
                 state.alerted = True
     
     return alerts
 ```
 
-**Xử lý Edge Cases:**
-
-1. **Track Switching**: Khi ByteTrack đổi ID, kế thừa state cũ dựa trên IoU
-```python
-# Tìm state cũ có bbox trùng với bag mới
-for old_tid, old_state in list(self._states.items()):
-    if old_tid not in active_bag_ids:
-        for bag in bags:
-            if calculate_iou(old_state.bbox, bag['bbox']) > 0.45:
-                # Kế thừa state
-                old_state.track_id = bag['track_id']
-                self._states[bag['track_id']] = old_state
-                del self._states[old_tid]
-                break
-```
-
-2. **Grace Period**: Đợi 3 giây trước khi xóa track biến mất
-```python
-if tid not in active_bag_ids:
-    if time.time() - state.last_seen >= 3.0:
-        del self._states[tid]
-```
-
-3. **Alert Cooldown**: 120 giây giữa các alert để tránh spam
-```python
-if time.time() - state.last_alert_at < 120.0:
-    continue  # Skip alert
-```
-
 **Thông số cấu hình:**
-- Owner radius: **160 pixels**
-- Abandon timeout: **60 giây**
-- Alert cooldown: **120 giây**
-- Grace period: **3 giây**
-- NMS IoU threshold: **0.45**
-- Confidence threshold: **0.22**
+- Owner radius: 160 pixels
+- Abandon timeout: 60 giây
+- Alert cooldown: 120 giây
+- NMS IoU threshold: 0.45
+- Confidence threshold: 0.22
 
-### 3.4.5 Thuật toán Weapon Detection
+### 3.4.4 Thiết kế thuật toán phát hiện vũ khí
 
-**Nguyên lý hoạt động:**
+Thuật toán phát hiện vũ khí sử dụng **two-stage approach** và **bearer detection**:
 
-Thuật toán phát hiện vũ khí sử dụng **2-stage approach**:
+**Stage 1 - Baseline Detection:**
 
-**Stage 1: Baseline Detection (COCO)**
+Sử dụng COCO class 43 (knife) làm baseline, không cần training. Đây là giải pháp nhanh cho prototype và demo.
+
+**Stage 2 - Fine-tuned Model (Optional):**
+
+Có thể thay thế bằng mô hình custom được fine-tune trên dataset vũ khí chuyên biệt, bao gồm: gun, pistol, rifle, knife, scissors.
+
+**Bearer Detection:**
+
+Khi phát hiện vũ khí, hệ thống tìm người gần nhất trong bán kính 130 pixels từ tâm vũ khí. Người này được xác định là "bearer" (người cầm vũ khí) và track_id được lưu lại để theo dõi.
+
+**Risk Level Classification:**
+
+- **Critical**: Vũ khí trong restricted zone (khu vực lên máy bay, phòng họp quan trọng)
+- **High**: Vũ khí ở khu vực thông thường
+- **Medium**: Vật thể có thể nguy hiểm (scissors)
+
+**Alert Strategy:**
+
+Khác với hành lý bỏ lại cần timer 60 giây, vũ khí được alert **ngay lập tức** khi phát hiện. Cooldown 25 giây theo vị trí (grid cell 50x50 pixels) để tránh spam alerts.
+
+**Ví dụ code mô phỏng:**
+
 ```python
-# Sử dụng COCO class 43 (knife)
-COCO_WEAPON_CLASSES = {
-    43: 'knife',
-    76: 'scissors'  # Có thể nguy hiểm
-}
-
-weapons = object_detector.detect(
-    frame,
-    classes=[43, 76],
-    conf=0.25  # Ngưỡng thấp để phát hiện tốt
-)
-```
-
-**Stage 2: Fine-tuned Model (Optional)**
-```python
-# Có thể thay bằng model custom từ Roboflow
-FINETUNE_WEAPON_CLASSES = {
-    0: 'gun',
-    1: 'knife',
-    2: 'pistol',
-    3: 'rifle',
-    4: 'scissors'
-}
-```
-
-**Bearer Detection (Người cầm vũ khí):**
-```python
-def find_bearer(weapon_center, persons, radius=130):
-    """
-    Tìm người gần nhất với vũ khí
-    """
-    min_distance = float('inf')
-    bearer_id = None
-    
-    for person in persons:
-        person_center = get_bbox_center(person['bbox'])
-        distance = euclidean_distance(weapon_center, person_center)
-        
-        if distance < min_distance and distance <= radius:
-            min_distance = distance
-            bearer_id = person['track_id']
-    
-    return bearer_id
-```
-
-**Alert Logic:**
-```python
-def detect_frame(self, frame, persons, zone_name=None):
+def detect_weapons(frame, persons, zone_name=None):
+    """Phát hiện vũ khí và xác định người cầm"""
     alerts = []
     
-    # 1. Detect weapons
-    weapons = self.od.detect(
-        frame,
-        classes=self.weapon_class_ids,
-        conf=self.conf
-    )
+    # Detect weapons với YOLO
+    weapons = yolo_detect(frame, classes=[43], conf=0.25)
     
-    # 2. Process each weapon
     for weapon in weapons:
-        bbox = weapon['bbox']
-        cx = (bbox[0] + bbox[2]) / 2
-        cy = (bbox[1] + bbox[3]) / 2
+        # Tìm bearer trong bán kính 130px
+        bearer_id = find_nearest_person(weapon['bbox'], persons, radius=130)
         
-        # 3. Cooldown check (theo vị trí)
-        loc_key = f"{weapon['class_name']}_{int(cx//50)}_{int(cy//50)}"
-        if time.time() - self._last_alert.get(loc_key, 0) < 25.0:
-            continue  # Skip nếu chưa đủ cooldown
-        
-        # 4. Find bearer
-        bearer_id = find_bearer((cx, cy), persons, self.bearer_radius)
-        
-        # 5. Determine risk level
+        # Xác định risk level
         risk = 'critical' if zone_name else 'high'
         
-        # 6. Create alert
-        self._last_alert[loc_key] = time.time()
+        # Tạo alert ngay lập tức
         alerts.append({
             'event_type': 'weapon_detected',
-            'track_id': bearer_id,
             'object_class': weapon['class_name'],
-            'bbox': bbox,
-            'confidence': weapon['conf'],
+            'bearer_id': bearer_id,
             'risk_level': risk,
-            'zone_name': zone_name,
-            'bearer_id': bearer_id
+            'confidence': weapon['conf']
         })
     
     return alerts
 ```
 
-**Risk Level Classification:**
-```python
-def determine_risk(zone_name, weapon_class):
-    """
-    Critical: Vũ khí trong restricted zone
-    High: Vũ khí ở khu vực thông thường
-    """
-    if zone_name:  # Restricted zone (VD: Gate, Security Checkpoint)
-        return 'critical'
-    
-    if weapon_class in ['gun', 'pistol', 'rifle']:
-        return 'high'
-    
-    return 'medium'
-```
-
-**Cooldown Strategy:**
-```python
-# Cooldown theo cell lưới 50x50 pixels
-loc_key = f"{class_name}_{int(cx//50)}_{int(cy//50)}"
-
-# Tránh alert liên tục cho cùng vị trí
-if time.time() - last_alert_time < 25.0:
-    skip_alert()
-```
-
-**Thông số cấu hình:**
-- Bearer radius: **130 pixels**
-- Alert cooldown: **25 giây**
-- Confidence threshold: **0.25**
-- Grid cell size: **50x50 pixels**
-- Risk levels: **medium, high, critical**
-
 **So sánh với Baggage Detection:**
 
-| Đặc điểm | Baggage Detection | Weapon Detection |
-|----------|-------------------|------------------|
-| **Timer** | 60 giây | Ngay lập tức |
-| **State** | Stateful (BaggageState) | Stateless |
-| **Proximity** | Owner (160px) | Bearer (130px) |
-| **Cooldown** | 120 giây | 25 giây |
-| **Risk** | High | High/Critical |
-| **Classes** | 3 (backpack, handbag, suitcase) | 2-5 (knife, gun, etc.) |
-
-**Ưu điểm:**
-- Phát hiện nhanh, không cần đợi
-- Xác định được người cầm vũ khí
-- Phân biệt risk level theo zone
-- Cooldown tránh spam alerts
-
-**Nhược điểm:**
-- COCO chỉ có knife, không có gun
-- Cần fine-tune model cho độ chính xác cao hơn
-- False positive với đồ vật giống vũ khí (điện thoại, bút, v.v.)
+| Đặc điểm | Baggage | Weapon |
+|----------|---------|--------|
+| Timer | 60s | Ngay lập tức |
+| State | Stateful | Stateless |
+| Proximity | 160px | 130px |
+| Cooldown | 120s | 25s |
+| Risk | High | High/Critical |
 
 
 ## 3.5 Thiết kế giải thuật và logic điều khiển
