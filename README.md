@@ -1130,7 +1130,6 @@ def detect_weapons(frame, persons, zone_name=None):
 | Cooldown | 120s | 25s |
 | Risk | High | High/Critical |
 
-
 ## 3.5 Thiết kế giải thuật và logic điều khiển
 
 ### 3.5.1 Logic điều khiển ESP32
